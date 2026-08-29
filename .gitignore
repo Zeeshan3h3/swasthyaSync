@@ -1,0 +1,26 @@
+# Root-level gitignore for MediKiosk monorepo
+
+# Environment variables — NEVER commit API keys
+backend/.env
+frontend/.env
+.env
+
+# Python
+backend/__pycache__/
+backend/*.pyc
+backend/*.pyo
+backend/uploads/
+backend/.venv/
+backend/venv/
+
+# Node / Frontend
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/settings.json
+*.swp
