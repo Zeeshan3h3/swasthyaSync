@@ -1,13 +1,12 @@
-﻿"""
-SwasthyaSync v3 — LLM Client (google.genai SDK)
+"""
+SwasthyaSync — Ultra-Low Latency Resilient LLM Client (google.genai SDK)
 
-Simplified for v3 architecture:
-  - conversation_turn: The unified LLM call used by the conversation engine
-  - classify_complaint: Classifies chief complaint into a category
-  - extract_document_entities: Extracts entities from OCR text
-
-The old ask_slot and extract_slots are REMOVED — replaced by the
-single conversation_turn call that does everything in one shot.
+Features:
+  - Valid Gemini Model Cascade (gemini-2.5-flash -> gemini-1.5-flash)
+  - Circuit Breaker Pattern (fast fail on 503/throttling)
+  - Retry with Exponential Backoff
+  - Disabled AFC (Automatic Function Calling) to prevent multi-call latency loops
+  - Async & Sync interface for FastAPI concurrency
 """
 
 from __future__ import annotations
@@ -32,7 +31,10 @@ except ImportError:
 
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
-GEMINI_MODEL = "gemini-3.5-flash-lite"
+
+# High-throughput sub-second models
+PRIMARY_MODEL = "gemini-2.5-flash"
+FALLBACK_MODEL = "gemini-1.5-flash"
 
 # Complaint categories for classification
 COMPLAINT_CATEGORIES = [
@@ -56,10 +58,49 @@ LANGUAGE_NAMES = {
     "en-IN": "English",
 }
 
+# ──────────────────────────────────────────────────────────────────────
+# Circuit Breaker & Health Management
+# ──────────────────────────────────────────────────────────────────────
 
-# ──────────────────────────────────────────────────────────────────────
-# Singleton Client
-# ──────────────────────────────────────────────────────────────────────
+class CircuitBreaker:
+    def __init__(self, failure_threshold: int = 3, reset_timeout: float = 15.0):
+        self.failure_threshold = failure_threshold
+        self.reset_timeout = reset_timeout
+        self.failure_count = 0
+        self.state = "CLOSED"  # CLOSED, OPEN, HALF_OPEN
+        self.last_state_change = time.time()
+
+    def record_success(self):
+        self.failure_count = 0
+        if self.state != "CLOSED":
+            logger.info("⚡ Circuit Breaker: Recovered! Resetting to CLOSED")
+            self.state = "CLOSED"
+            self.last_state_change = time.time()
+
+    def record_failure(self, reason: str = ""):
+        self.failure_count += 1
+        logger.warning(f"⚡ Circuit Breaker failure ({self.failure_count}/{self.failure_threshold}): {reason}")
+        if self.failure_count >= self.failure_threshold:
+            if self.state != "OPEN":
+                logger.error(f"🚨 Circuit Breaker TRIPPED to OPEN! Fast failing LLM calls for {self.reset_timeout}s")
+                self.state = "OPEN"
+                self.last_state_change = time.time()
+
+    def allow_request(self) -> bool:
+        if self.state == "CLOSED":
+            return True
+        elif self.state == "OPEN":
+            if time.time() - self.last_state_change > self.reset_timeout:
+                logger.info("⚡ Circuit Breaker: Testing recovery (HALF_OPEN)")
+                self.state = "HALF_OPEN"
+                return True
+            return False
+        elif self.state == "HALF_OPEN":
+            return True
+        return True
+
+
+circuit_breaker = CircuitBreaker()
 
 _client_instance = None
 
@@ -73,27 +114,62 @@ def _get_client():
     return _client_instance
 
 
-def _generate_json(client, system_prompt: str, user_prompt: str, temperature: float = 0.3) -> dict:
-    """Call Gemini and parse JSON response. Logs timing."""
-    t0 = time.time()
-    response = client.models.generate_content(
-        model=GEMINI_MODEL,
-        contents=user_prompt,
-        config=genai_types.GenerateContentConfig(
-            system_instruction=system_prompt,
-            response_mime_type="application/json",
-            temperature=temperature,
-        ),
-    )
-    elapsed = time.time() - t0
-    logger.info(f"Gemini call took {elapsed:.2f}s (model={GEMINI_MODEL})")
-    return json.loads(response.text)
+def _generate_json_with_retry(
+    client, system_prompt: str, user_prompt: str, temperature: float = 0.3
+) -> dict:
+    """Call Gemini with model fallback, retries, and disabled AFC for fast turns."""
+    if not circuit_breaker.allow_request():
+        raise RuntimeError("Circuit breaker is OPEN — bypassing LLM call for immediate fallback")
+
+    models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
+    last_exception = None
+
+    for model in models_to_try:
+        max_retries = 2
+        for attempt in range(max_retries):
+            t0 = time.time()
+            try:
+                # Explicitly disable AFC to stop 10-step remote execution loops
+                config = genai_types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    response_mime_type="application/json",
+                    temperature=temperature,
+                    automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
+                )
+                
+                response = client.models.generate_content(
+                    model=model,
+                    contents=user_prompt,
+                    config=config,
+                )
+                
+                elapsed = time.time() - t0
+                logger.info(f"Gemini call took {elapsed:.2f}s (model={model})")
+                
+                parsed = json.loads(response.text)
+                circuit_breaker.record_success()
+                return parsed
+
+            except Exception as e:
+                elapsed = time.time() - t0
+                err_msg = str(e)
+                last_exception = e
+                logger.warning(f"Gemini call attempt {attempt+1} failed on {model} after {elapsed:.2f}s: {err_msg[:120]}")
+                
+                # Check for 503 or quota errors
+                if "503" in err_msg or "UNAVAILABLE" in err_msg or "high demand" in err_msg:
+                    circuit_breaker.record_failure(err_msg[:80])
+                    break  # Break retry loop for this model, try fallback model
+                
+                if attempt < max_retries - 1:
+                    time.sleep(0.2 * (2 ** attempt))
+
+    circuit_breaker.record_failure(str(last_exception)[:80])
+    raise last_exception or RuntimeError("All Gemini model attempts failed")
 
 
 # ──────────────────────────────────────────────────────────────────────
-# CONTRACT 1: conversation_turn (NEW — the unified call)
-# Used by conversation_engine.py for each turn of the conversation.
-# One call does: question + extraction + options + completion check.
+# Unified Call: conversation_turn
 # ──────────────────────────────────────────────────────────────────────
 
 def conversation_turn(
@@ -101,34 +177,20 @@ def conversation_turn(
     user_prompt: str,
     temperature: float = 0.4,
 ) -> dict:
-    """
-    Execute a single conversation turn via LLM.
-    
-    The system_prompt is built by clinical_prompts.build_conversation_system_prompt()
-    and contains all the clinical guidelines, language rules, and output format.
-    
-    The user_prompt contains conversation history and patient context.
-    
-    Returns the parsed JSON response from the LLM containing:
-    - spoken_text, suggested_options, section_complete, extracted_data,
-      section_summary, red_flag_check, reasoning
-    """
+    """Execute a single conversation turn via LLM with fallback protection."""
     client = _get_client()
     if client is None:
         return _mock_conversation_turn(user_prompt)
 
     try:
-        return _generate_json(client, system_prompt, user_prompt, temperature)
-    except json.JSONDecodeError as e:
-        logger.error(f"conversation_turn JSON parse error: {e}")
-        return _mock_conversation_turn(user_prompt)
+        return _generate_json_with_retry(client, system_prompt, user_prompt, temperature)
     except Exception as e:
-        logger.error(f"conversation_turn failed: {e}")
+        logger.error(f"conversation_turn failed gracefully: {e}")
         return _mock_conversation_turn(user_prompt)
 
 
 def _mock_conversation_turn(user_prompt: str) -> dict:
-    """Mock conversation turn when LLM is unavailable."""
+    """Mock conversation turn when LLM is unavailable or circuit is open."""
     return {
         "spoken_text": "Could you tell me more about your symptoms?",
         "suggested_options": [
@@ -140,26 +202,21 @@ def _mock_conversation_turn(user_prompt: str) -> dict:
         "extracted_data": {},
         "section_summary": "",
         "red_flag_check": None,
-        "reasoning": "Mock response — LLM unavailable",
+        "reasoning": "Fallback response — LLM circuit open or unavailable",
     }
 
 
 # ──────────────────────────────────────────────────────────────────────
-# CONTRACT 2: classify_complaint
-# Classifies the chief complaint for FSM routing
+# Complaint Classification
 # ──────────────────────────────────────────────────────────────────────
 
 def classify_complaint(text: str, language: str = "en-IN") -> str:
-    """
-    Classify a chief complaint into one of the category set.
-    Used by the dialogue manager to route FSM state.
-    """
+    """Classify chief complaint into a category."""
     client = _get_client()
     if client is None:
         return _mock_classify(text)
 
     lang_name = LANGUAGE_NAMES.get(language, language)
-
     system_prompt = f"""Classify the patient's chief complaint into exactly ONE of these categories:
 {json.dumps(COMPLAINT_CATEGORIES)}
 
@@ -168,7 +225,7 @@ Output ONLY a JSON object: {{"category": "<one of the categories>"}}
 If unsure, use "general"."""
 
     try:
-        result = _generate_json(client, system_prompt, f"Patient says: {text}", temperature=0.0)
+        result = _generate_json_with_retry(client, system_prompt, f"Patient says: {text}", temperature=0.0)
         cat = result.get("category", "general")
         return cat if cat in COMPLAINT_CATEGORIES else "general"
     except Exception as e:
@@ -196,7 +253,7 @@ def _mock_classify(text: str) -> str:
 
 
 # ──────────────────────────────────────────────────────────────────────
-# CONTRACT 3: extract_document_entities (OCR pipeline)
+# Document OCR Entity Extraction
 # ──────────────────────────────────────────────────────────────────────
 
 def extract_document_entities(ocr_text: str, doc_type: str = "prescription") -> dict:
@@ -216,7 +273,7 @@ Output a JSON object with:
 Only extract what is clearly present. Mark uncertain extractions."""
 
     try:
-        return _generate_json(
+        return _generate_json_with_retry(
             client,
             system_prompt,
             f"Document type: {doc_type}\nOCR text:\n{ocr_text}",

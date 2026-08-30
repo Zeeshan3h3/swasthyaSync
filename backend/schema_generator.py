@@ -1,4 +1,4 @@
-﻿"""
+"""
 SwasthyaSync v4 — Dynamic Schema Generator (Stage 1)
 
 Called ONCE per encounter, immediately after chief complaint + demographics.
@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────
 # Stage 1 Model — heavier model called once per encounter
 # ──────────────────────────────────────────────────────────────────────
-SCHEMA_MODEL_PRIMARY = "gemini-3.6-flash"
-SCHEMA_MODEL_FALLBACK = "gemini-3.5-flash-lite"
+SCHEMA_MODEL_PRIMARY = "gemini-2.5-flash"
+SCHEMA_MODEL_FALLBACK = "gemini-1.5-flash"
 
 # Language names for demographic context
 LANGUAGE_NAMES = {
@@ -163,6 +163,7 @@ def _call_model_for_schema(model: str, system_prompt: str, user_prompt: str) -> 
                 system_instruction=system_prompt,
                 response_mime_type="application/json",
                 temperature=0.3,
+                automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )
         result = json.loads(response.text)

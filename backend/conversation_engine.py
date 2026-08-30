@@ -1,4 +1,4 @@
-﻿"""
+"""
 SwasthyaSync v4 — Conversation Engine (Stage 2)
 
 Two-step per-turn logic using the fast/cheap model:
@@ -14,6 +14,7 @@ import logging
 import time
 
 import llm_client
+from fast_path_cache import get_cached_question
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,19 @@ def generate_question(
     question_intent = target_field.get("question_intent", "")
     category = target_field.get("category", "HPI")
     is_red_flag = target_field.get("red_flag", False)
+
+    # Fast-Path Cache Check (< 5ms response for common clinical intake fields)
+    cached = get_cached_question(field_id, language)
+    if cached:
+        logger.info(f"⚡ Fast-Path Cache hit for field={field_id}, language={language}")
+        return ConversationResult({
+            "spoken_text": cached["spoken_text"],
+            "suggested_options": cached["suggested_options"],
+            "extracted_fields": {},
+            "red_flag_check": None,
+            "reasoning": "Fast-Path cache hit (< 5ms)",
+            "current_category": category,
+        })
 
     # Last messages for context
     recent_msgs = conversation_history[-6:] if conversation_history else []
