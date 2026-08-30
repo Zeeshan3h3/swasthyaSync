@@ -121,7 +121,7 @@ def _generate_json_with_retry(
     if not circuit_breaker.allow_request():
         raise RuntimeError("Circuit breaker is OPEN — bypassing LLM call for immediate fallback")
 
-    models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL, "gemini-2.5-flash"]
+    models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
     last_exception = None
 
     for model in models_to_try:

@@ -121,8 +121,12 @@ async def upload_document(
     with open(file_path, "wb") as f:
         f.write(image_bytes)
 
+    import base64
+    b64_img = base64.b64encode(image_bytes).decode('utf-8')
+    data_url = f"data:{content_type};base64,{b64_img}"
+
     result = await process_document(image_bytes, filename=file.filename or "doc.jpg", media_type=content_type)
-    result["image_url"] = f"/uploads/{safe_filename}"
+    result["image_url"] = data_url
 
     # If we have a session, merge OCR entities into the patient record
     if session_id and session_id in sessions:
