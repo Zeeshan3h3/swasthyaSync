@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────
 # Stage 1 Model — heavier model called once per encounter
 # ──────────────────────────────────────────────────────────────────────
-SCHEMA_MODEL_PRIMARY = "gemini-2.5-flash"
-SCHEMA_MODEL_FALLBACK = "gemini-1.5-flash"
+SCHEMA_MODEL_PRIMARY = "gemini-3.6-flash"
+SCHEMA_MODEL_FALLBACK = "gemini-3.5-flash-lite"
 
 # Language names for demographic context
 LANGUAGE_NAMES = {

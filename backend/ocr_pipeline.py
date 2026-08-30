@@ -1,4 +1,4 @@
-﻿"""
+"""
 SwasthyaSync — OCR & NER Pipeline (Clinical Vision AI Engine)
 
 Integrates Gemini 2.5 Flash for multimodal medical document digitization.
@@ -102,25 +102,33 @@ async def process_document(image_bytes: bytes, filename: str = "document.jpg", m
         logger.error("GEMINI_API_KEY not set. Document extraction will fail or return mock data.")
         return {"doc_id": "mock_id", "document_type": "unknown", "error": "API Key missing"}
 
-    try:
-        response = await client.aio.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=[
-                types.Part.from_bytes(data=image_bytes, mime_type=media_type),
-                "Analyze this medical document image. Extract all clinical entities following your instruction rules. Return structured JSON."
-            ],
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                response_schema=DigitizedDocument,
-                system_instruction=SYSTEM_PROMPT,
-                temperature=0.0
+    models_to_try = ["gemini-3.5-flash-lite", "gemini-3.6-flash", "gemini-2.5-flash"]
+    last_error = None
+
+    for model_name in models_to_try:
+        try:
+            logger.info(f"Attempting OCR vision extraction with model: {model_name}")
+            response = await client.aio.models.generate_content(
+                model=model_name,
+                contents=[
+                    types.Part.from_bytes(data=image_bytes, mime_type=media_type),
+                    "Analyze this medical document image. Extract all clinical entities following your instruction rules. Return structured JSON."
+                ],
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                    response_schema=DigitizedDocument,
+                    system_instruction=SYSTEM_PROMPT,
+                    temperature=0.0
+                )
             )
-        )
-        doc = response.parsed
-        if doc:
-            doc.filename = filename
-            return doc.model_dump()
-        return {}
-    except Exception as e:
-        logger.error(f"Vision extraction failed: {str(e)}")
-        return {"doc_id": "error_id", "document_type": "unknown", "error": str(e)}
+            doc = response.parsed
+            if doc:
+                doc.filename = filename
+                logger.info(f"OCR vision extraction succeeded with model {model_name}")
+                return doc.model_dump()
+        except Exception as e:
+            last_error = str(e)
+            logger.warning(f"OCR vision extraction failed with model {model_name}: {last_error}")
+
+    logger.error(f"All OCR vision extraction models failed. Last error: {last_error}")
+    return {"doc_id": "error_id", "document_type": "unknown", "error": last_error or "Extraction failed"}
