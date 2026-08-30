@@ -1,5 +1,5 @@
-/**
- * MediKiosk — Sarvam AI Speech-to-Text Hook (Fixed & Optimized)
+﻿/**
+ * SwasthyaSync — Sarvam AI Speech-to-Text Hook (Fixed & Optimized)
  *
  * Fixes:
  *  1. Touch+mouse double-fire — preventDefault on touch events stops the

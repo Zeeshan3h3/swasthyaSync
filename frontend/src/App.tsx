@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { useConversation } from './hooks/useConversation';
 import { Layout } from './components/Layout';
 import { Screen1_Welcome } from './screens/Screen1_Welcome';
@@ -17,6 +18,7 @@ function App() {
     isConnected,
     isProcessing,
     startSession,
+    resumeSession,
     sendInput,
     sendRedflag,
     clearRedflag,
@@ -26,7 +28,18 @@ function App() {
   const [pendingSession, setPendingSession] = useState<{
     clinicMode: string;
     language: string;
+    patientId?: string;
   } | null>(null);
+
+  // Resume session on mount if one exists
+  useEffect(() => {
+    if (isConnected && !ui) {
+      const storedSessionId = sessionStorage.getItem('swasthyasync_session');
+      if (storedSessionId) {
+        resumeSession(storedSessionId);
+      }
+    }
+  }, [isConnected, ui, resumeSession]);
 
   // Connection status indicator (dev helper)
   const connectionBadge = (
@@ -44,8 +57,33 @@ function App() {
       if (!pendingSession) {
         return (
           <Screen1_Welcome
-            onStart={(clinicMode: string, language: string) => {
-              setPendingSession({ clinicMode, language });
+            onStart={async (clinicMode: string, language: string, patientData?: any) => {
+              if (patientData && patientData.full_name) {
+                try {
+                  const baseUrl = window.location.origin.replace(':5173', ':8000');
+                  const res = await fetch(`${baseUrl}/api/session/start`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ patient_id: patientData.patient_id })
+                  });
+                  if (res.ok) {
+                    const sessionData = await res.json();
+                    sessionStorage.setItem('swasthyasync_session', sessionData.session_id);
+                    startSession(
+                      clinicMode, 
+                      language, 
+                      { name: patientData.full_name, age: patientData.age, sex: patientData.gender }, 
+                      patientData.patient_id, 
+                      sessionData.session_id
+                    );
+                  }
+                } catch(e) {
+                  console.error(e);
+                  alert("Failed to start session");
+                }
+              } else {
+                setPendingSession({ clinicMode, language, patientId: patientData?.patient_id });
+              }
             }}
             isConnected={isConnected}
           />
@@ -55,12 +93,29 @@ function App() {
       // Language selected, collect demographics
       return (
         <Screen2_AuthConsent
-          onNext={(demographics) => {
-            startSession(
-              pendingSession.clinicMode,
-              pendingSession.language,
-              demographics,
-            );
+          onNext={async (demographics) => {
+            try {
+              const baseUrl = window.location.origin.replace(':5173', ':8000');
+              const res = await fetch(`${baseUrl}/api/session/start`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ patient_id: pendingSession.patientId })
+              });
+              if (res.ok) {
+                const sessionData = await res.json();
+                sessionStorage.setItem('swasthyasync_session', sessionData.session_id);
+                startSession(
+                  pendingSession.clinicMode,
+                  pendingSession.language,
+                  demographics,
+                  pendingSession.patientId,
+                  sessionData.session_id
+                );
+              }
+            } catch(e) {
+              console.error(e);
+              alert("Failed to start session");
+            }
           }}
           onBack={() => setPendingSession(null)}
         />
@@ -73,9 +128,7 @@ function App() {
     if (screen === 'triage_alert') {
       return (
         <Screen7_TriageAlert
-          redFlags={ui.red_flags || []}
-          orbState={orbState}
-          onClearFlag={() => clearRedflag()}
+          onAcknowledge={() => clearRedflag()}
         />
       );
     }
@@ -87,12 +140,30 @@ function App() {
         // INIT/DEMOGRAPHICS state from server — advance automatically
         return (
           <Screen2_AuthConsent
-            onNext={(demographics) => {
-              startSession(
-                pendingSession?.clinicMode || 'allopathic',
-                pendingSession?.language || 'en-IN',
-                demographics,
-              );
+            language={pendingSession?.language || 'en-IN'}
+            onNext={async (demographics) => {
+              try {
+                const baseUrl = window.location.origin.replace(':5173', ':8000');
+                const res = await fetch(`${baseUrl}/api/session/start`, {
+                  method: 'POST',
+                  headers: {'Content-Type': 'application/json'},
+                  body: JSON.stringify({ patient_id: pendingSession?.patientId })
+                });
+                if (res.ok) {
+                  const sessionData = await res.json();
+                  sessionStorage.setItem('swasthyasync_session', sessionData.session_id);
+                  startSession(
+                    pendingSession?.clinicMode || 'allopathic',
+                    pendingSession?.language || 'en-IN',
+                    demographics,
+                    pendingSession?.patientId || undefined,
+                    sessionData.session_id
+                  );
+                }
+              } catch(e) {
+                console.error(e);
+                alert("Failed to start session");
+              }
             }}
             onBack={() => sendInput('back', '')}
           />
@@ -116,8 +187,8 @@ function App() {
         return (
           <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
             <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-6" />
-            <h2 className="text-xl font-semibold text-gray-800 mb-2">Preparing Your Interview</h2>
-            <p className="text-gray-500 max-w-sm">
+            <h2 className="text-xl font-semibold text-slate-800 mb-2">Preparing Your Interview</h2>
+            <p className="text-slate-500 max-w-sm">
               Generating a clinical questionnaire tailored specifically to your complaint...
             </p>
           </div>
@@ -126,9 +197,25 @@ function App() {
       case 'document_scan':
         return (
           <Screen5_DocumentScanner
-            sessionId={ui.session_id}
-            onNext={() => sendInput('next', '')}
-            onBack={() => sendInput('back', '')}
+            language={ui.language || pendingSession?.language || 'en-IN'}
+            onNext={async (file: File) => {
+              if (file && ui?.session_id) {
+                const formData = new FormData();
+                formData.append('file', file);
+                formData.append('session_id', ui.session_id);
+                const baseUrl = window.location.origin.replace(':5173', ':8000');
+                try {
+                  await fetch(`${baseUrl}/api/ocr`, {
+                    method: 'POST',
+                    body: formData,
+                  });
+                } catch (e) {
+                  console.error("OCR upload failed", e);
+                }
+              }
+              sendInput('next', '');
+            }}
+            onSkip={() => sendInput('skip', '')}
           />
         );
 
@@ -136,20 +223,32 @@ function App() {
         return (
           <Screen6_DigitizationVerification
             patientRecord={ui.patient_record}
+            sessionId={ui.session_id}
+            language={ui.language || pendingSession?.language || 'en-IN'}
             onNext={() => sendInput('next', '')}
             onBack={() => sendInput('back', '')}
           />
         );
 
       case 'complete':
-        return <Screen8_Complete patientRecord={ui.patient_record} />;
+        return (
+          <Screen8_Complete 
+            patientRecord={ui.patient_record} 
+            sessionId={ui.session_id} 
+            language={ui.language || pendingSession?.language || 'en-IN'}
+            onReset={() => {
+              sessionStorage.removeItem('swasthyasync_session');
+              window.location.reload();
+            }} 
+          />
+        );
 
       default:
         return (
           <div className="flex-1 flex items-center justify-center p-8 text-center">
             <div>
-              <p className="text-gray-500 text-sm mb-2">State: {ui.macro_state}</p>
-              <p className="text-gray-400 text-xs">Screen: {screen}</p>
+              <p className="text-slate-500 text-sm mb-2">State: {ui.macro_state}</p>
+              <p className="text-slate-400 text-xs">Screen: {screen}</p>
             </div>
           </div>
         );
@@ -159,7 +258,11 @@ function App() {
   return (
     <Layout>
       {connectionBadge}
-      {renderScreen()}
+      <AnimatePresence mode="wait" initial={false}>
+        <div key={ui?.screen || 'pending'} className="flex flex-col flex-1 h-full min-h-full">
+          {renderScreen()}
+        </div>
+      </AnimatePresence>
     </Layout>
   );
 }

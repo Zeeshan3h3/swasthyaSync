@@ -1,5 +1,5 @@
-"""
-MediKiosk v4 — Dialogue Manager (Dynamic Schema-Driven)
+﻿"""
+SwasthyaSync v4 — Dialogue Manager (Dynamic Schema-Driven)
 
 Orchestrates the Two-Stage LLM Pipeline:
   Stage 1: After chief complaint → generate dynamic schema (once)
@@ -108,6 +108,61 @@ class DialogueManager:
 
         # Fallback
         return self._build_ui_instruction()
+
+    def resume_session(self) -> dict:
+        """Re-construct the UI state for the current step without side-effects."""
+        state = self.fsm.state
+        if state == "DYNAMIC_INTERVIEW":
+            # Find the last assistant message
+            last_msg = None
+            for msg in reversed(self.record.conversation_history):
+                if msg["role"] == "assistant":
+                    last_msg = msg["content"]
+                    break
+            
+            import field_selector
+            schema = self.record.dynamic_schema or {"fields": []}
+            progress = field_selector.get_progress(schema, self.record.filled_state)
+            category_label = field_selector.get_current_category_label(schema, self.record.filled_state)
+            
+            return {
+                "macro_state": "DYNAMIC_INTERVIEW",
+                "clinic_mode": self.record.clinic_mode,
+                "session_id": self.record.session_id,
+                "language": self.language,
+                "screen": "conversation",
+                "orb_state": "idle",
+                "prompt": last_msg or "Let's continue.",
+                "options": [], 
+                "section_label": category_label,
+                "can_skip": True,
+                "progress": progress,
+                "section_summary": self.record.get_filled_summary(),
+                "conversation_history": self.record.conversation_history[-6:],
+            }
+        elif state == "CHIEF_COMPLAINT":
+            last_msg = None
+            for msg in reversed(self.record.conversation_history):
+                if msg["role"] == "assistant":
+                    last_msg = msg["content"]
+                    break
+            return {
+                "macro_state": state,
+                "clinic_mode": self.record.clinic_mode,
+                "session_id": self.record.session_id,
+                "language": self.language,
+                "screen": "conversation",
+                "orb_state": "idle",
+                "prompt": last_msg or "What brings you in today?",
+                "options": [],
+                "section_label": "Chief Complaint",
+                "can_skip": False,
+                "progress": {"done": 0, "total": 1, "percent": 0, "label": "Getting started"},
+                "section_summary": "",
+                "conversation_history": [],
+            }
+        else:
+            return self._build_ui_instruction()
 
     def process_redflag(self) -> dict:
         self.fsm.trigger_redflag()

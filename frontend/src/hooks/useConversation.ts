@@ -1,5 +1,5 @@
-/**
- * MediKiosk — WebSocket Conversation Hook
+﻿/**
+ * SwasthyaSync — WebSocket Conversation Hook
  *
  * Manages the WebSocket lifecycle to the backend Dialogue Manager.
  * The server pushes UI instructions, the client renders them.
@@ -61,7 +61,8 @@ interface UseConversationReturn {
   orbState: OrbState;
   isConnected: boolean;
   isProcessing: boolean;
-  startSession: (clinicMode?: string, language?: string, demographics?: { name?: string; age?: number | null; sex?: string }) => void;
+  startSession: (clinicMode?: string, language?: string, demographics?: { name?: string; age?: number | null; sex?: string }, patientId?: string, sessionId?: string) => void;
+  resumeSession: (sessionId: string) => void;
   sendInput: (inputType: string, value: string) => void;
   sendRedflag: () => void;
   clearRedflag: () => void;
@@ -85,7 +86,7 @@ export function useConversation(): UseConversationReturn {
     wsRef.current = ws;
 
     ws.onopen = () => {
-      console.log('[WS] Connected to MediKiosk backend');
+      console.log('[WS] Connected to SwasthyaSync backend');
       setIsConnected(true);
     };
 
@@ -114,6 +115,9 @@ export function useConversation(): UseConversationReturn {
         if (msg.type === 'error') {
           console.error('[WS] Server error:', msg.message);
           setIsProcessing(false);
+          if (msg.message === 'Session not found or expired') {
+            sessionStorage.removeItem('swasthyasync_session');
+          }
           return;
         }
       } catch (e) {
@@ -149,7 +153,13 @@ export function useConversation(): UseConversationReturn {
     }
   }, []);
 
-  const startSession = useCallback((clinicMode = 'allopathic', language = 'en-IN', demographics?: { name?: string; age?: number | null; sex?: string }) => {
+  const startSession = useCallback((
+    clinicMode = 'allopathic', 
+    language = 'en-IN', 
+    demographics?: { name?: string; age?: number | null; sex?: string },
+    patientId?: string,
+    sessionId?: string
+  ) => {
     send({
       type: 'start',
       clinic_mode: clinicMode,
@@ -157,6 +167,15 @@ export function useConversation(): UseConversationReturn {
       patient_name: demographics?.name || '',
       patient_age: demographics?.age || null,
       patient_sex: demographics?.sex || '',
+      patient_id: patientId,
+      session_id: sessionId
+    });
+  }, [send]);
+
+  const resumeSession = useCallback((sessionId: string) => {
+    send({
+      type: 'resume',
+      session_id: sessionId
     });
   }, [send]);
 
@@ -184,6 +203,7 @@ export function useConversation(): UseConversationReturn {
     isConnected,
     isProcessing,
     startSession,
+    resumeSession,
     sendInput,
     sendRedflag,
     clearRedflag,

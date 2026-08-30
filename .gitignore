@@ -17,6 +17,14 @@ backend/venv/
 frontend/node_modules/
 frontend/dist/
 
+# SQLite databases & temp generated files
+*.db
+*.db-shm
+*.db-wal
+backend/generated_pdfs/
+backend/test.pdf
+artifacts/
+
 # OS
 .DS_Store
 Thumbs.db

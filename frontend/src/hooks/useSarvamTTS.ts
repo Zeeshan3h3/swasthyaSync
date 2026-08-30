@@ -1,12 +1,12 @@
-/**
- * MediKiosk — Sarvam AI Text-to-Speech Hook
+﻿/**
+ * SwasthyaSync — Sarvam AI Text-to-Speech Hook
  *
  * Sends text to the backend /api/tts endpoint (powered by Sarvam AI),
  * receives WAV audio bytes, and plays them via an HTMLAudioElement.
  * Auto-selects a natural voice for the given Indian language.
  */
 
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface UseSarvamTTSReturn {
   speak: (text: string, language: string) => Promise<void>;
@@ -22,9 +22,17 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
   const [error, setError] = useState<string | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const blobUrlRef = useRef<string | null>(null);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   const stop = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
     if (audioRef.current) {
+      audioRef.current.onplay = null;
+      audioRef.current.onended = null;
+      audioRef.current.onerror = null;
       audioRef.current.pause();
       audioRef.current.src = '';
     }
@@ -35,11 +43,20 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
     setIsSpeaking(false);
   }, []);
 
+  useEffect(() => {
+    return () => {
+      stop();
+    };
+  }, [stop]);
+
   const speak = useCallback(async (text: string, language: string) => {
     if (!text?.trim()) return;
 
-    stop(); // Stop any currently playing audio
+    stop(); // Stop any currently playing audio and abort in-flight requests
     setError(null);
+
+    const abortController = new AbortController();
+    abortControllerRef.current = abortController;
 
     try {
       const formData = new FormData();
@@ -49,6 +66,7 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
       const response = await fetch(`${BACKEND_URL}/api/tts`, {
         method: 'POST',
         body: formData,
+        signal: abortController.signal,
       });
 
       if (!response.ok) {
@@ -56,6 +74,10 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
       }
 
       const audioBlob = await response.blob();
+      
+      // If we got aborted while waiting for response, skip processing
+      if (abortController.signal.aborted) return;
+      
       const blobUrl = URL.createObjectURL(audioBlob);
       blobUrlRef.current = blobUrl;
 
@@ -74,7 +96,11 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
       };
 
       await audio.play();
-    } catch (err) {
+    } catch (err: any) {
+      if (err?.name === 'AbortError') {
+        // Ignored, we aborted the request on purpose
+        return;
+      }
       const msg = err instanceof Error ? err.message : 'TTS request failed';
       setError(msg);
       setIsSpeaking(false);

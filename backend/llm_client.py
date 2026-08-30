@@ -1,5 +1,5 @@
-"""
-MediKiosk v3 — LLM Client (google.genai SDK)
+﻿"""
+SwasthyaSync v3 — LLM Client (google.genai SDK)
 
 Simplified for v3 architecture:
   - conversation_turn: The unified LLM call used by the conversation engine

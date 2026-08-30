@@ -1,65 +1,59 @@
-import { Info } from 'lucide-react';
-import { AbstractOrb } from '../components/AbstractOrb';
-import type { OrbState } from '../components/AbstractOrb';
-import type { RedFlag } from '../hooks/useConversation';
+import { useEffect } from 'react';
+import { ShieldAlert } from 'lucide-react';
+import { motion } from 'framer-motion';
 
 interface Props {
-  redFlags: RedFlag[];
-  orbState: OrbState;
-  onClearFlag: () => void;
+  onAcknowledge: () => void;
 }
 
-export function Screen7_TriageAlert({ redFlags, onClearFlag }: Props) {
-  const primaryFlag = redFlags[0];
+export function Screen7_TriageAlert({ onAcknowledge }: Props) {
+  useEffect(() => {
+    // Auto-acknowledge after 7 seconds if the user doesn't tap
+    const timer = setTimeout(() => {
+      onAcknowledge();
+    }, 7000);
+    return () => clearTimeout(timer);
+  }, [onAcknowledge]);
 
   return (
-    <div className="flex flex-col flex-1 items-center p-6 sm:p-10 text-center bg-red-50/30">
-      <div className="mb-4 text-sm font-bold tracking-widest text-red-600 uppercase bg-red-100 px-6 py-2 rounded-full border border-red-200">
-        Emergency / Red-Flag Triage Alert
+    <motion.div 
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 1.1 }}
+      className="flex flex-col flex-1 items-center justify-center p-6 sm:p-12 text-center relative overflow-hidden bg-red-50 w-full h-full"
+    >
+      {/* Pulsing background effect */}
+      <motion.div 
+        animate={{ opacity: [0.1, 0.3, 0.1] }}
+        transition={{ duration: 2, repeat: Infinity }}
+        className="absolute inset-0 bg-gradient-to-t from-red-200/50 to-transparent pointer-events-none" 
+      />
+
+      <div className="relative z-10 w-24 h-24 sm:w-32 sm:h-32 bg-red-100 rounded-full flex items-center justify-center mb-8">
+        <motion.div
+          animate={{ scale: [1, 1.2, 1] }}
+          transition={{ duration: 1, repeat: Infinity }}
+          className="absolute inset-0 bg-red-200 rounded-full opacity-50"
+        />
+        <ShieldAlert className="w-12 h-12 sm:w-16 sm:h-16 text-red-600 relative z-10" />
       </div>
 
-      <div className="my-10">
-        <AbstractOrb interactionState="alert" />
-      </div>
-
-      <h2 className="text-2xl font-bold text-red-600 mb-4">This could be a serious symptom.</h2>
-      <p className="text-gray-800 text-lg mb-8 max-w-md">
-        Please contact the triage nurse immediately.
+      <h2 className="relative z-10 text-4xl sm:text-5xl font-extrabold text-red-700 mb-6 tracking-tight max-w-2xl">
+        Priority Assistance Required
+      </h2>
+      
+      <p className="relative z-10 text-xl text-red-900/80 font-medium mb-12 max-w-2xl bg-white/50 backdrop-blur-sm p-6 rounded-3xl border border-red-100">
+        Based on your symptoms, we are moving you to the 
+        <strong className="text-red-700 ml-1">Priority Triage Queue</strong>. 
+        A nurse has been alerted and will see you immediately.
       </p>
 
-      {primaryFlag && (
-        <div className="bg-white border border-red-100 shadow-sm rounded-xl p-6 w-full max-w-md mb-6">
-          <p className="text-gray-500 text-sm mb-2">Detected concern:</p>
-          <p className="text-red-600 font-bold text-lg">{primaryFlag.description}</p>
-          <p className="text-xs text-gray-400 mt-2 font-mono">Rule: {primaryFlag.rule_id}</p>
-        </div>
-      )}
-
-      {redFlags.length > 1 && (
-        <div className="space-y-2 w-full max-w-md mb-6">
-          {redFlags.slice(1).map((flag, i) => (
-            <div key={i} className="bg-white border border-red-50 rounded-lg p-3 text-left">
-              <p className="text-sm text-red-600 font-medium">{flag.description}</p>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <button className="w-full max-w-md bg-red-600 hover:bg-red-700 text-white rounded-xl py-4 font-bold shadow-lg shadow-red-200 transition-all text-lg mb-8">
-        Call Triage Nurse
-      </button>
-
-      <div className="flex items-start gap-3 text-left text-blue-800 bg-blue-50 p-4 rounded-xl max-w-md">
-        <Info className="w-5 h-5 flex-shrink-0 mt-0.5 text-blue-600" />
-        <p className="text-sm">A staff member has been notified. Please wait for assistance.</p>
-      </div>
-
       <button
-        onClick={onClearFlag}
-        className="mt-10 text-xs text-gray-400 underline"
+        onClick={onAcknowledge}
+        className="relative z-10 group overflow-hidden bg-red-600 text-white px-12 py-5 rounded-full font-bold shadow-xl shadow-red-600/30 hover:bg-red-700 transition-all active:scale-95 text-lg flex items-center gap-3"
       >
-        [Dev] Clear Flag & Resume
+        <span className="relative z-10">I Understand</span>
       </button>
-    </div>
+    </motion.div>
   );
 }

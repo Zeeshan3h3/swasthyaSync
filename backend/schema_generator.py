@@ -1,5 +1,5 @@
-"""
-MediKiosk v4 — Dynamic Schema Generator (Stage 1)
+﻿"""
+SwasthyaSync v4 — Dynamic Schema Generator (Stage 1)
 
 Called ONCE per encounter, immediately after chief complaint + demographics.
 Uses a heavy model (Gemini 3.6 Flash) to generate a complaint-specific

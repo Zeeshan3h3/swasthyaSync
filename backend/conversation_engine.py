@@ -1,5 +1,5 @@
-"""
-MediKiosk v4 — Conversation Engine (Stage 2)
+﻿"""
+SwasthyaSync v4 — Conversation Engine (Stage 2)
 
 Two-step per-turn logic using the fast/cheap model:
   1. EXTRACTION: Given patient's message + unfilled fields → extract values

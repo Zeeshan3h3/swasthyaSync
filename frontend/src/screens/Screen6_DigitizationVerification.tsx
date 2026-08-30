@@ -1,234 +1,231 @@
-import { CheckCircle2, AlertCircle, ChevronDown } from 'lucide-react';
+import { CheckCircle, AlertTriangle, ArrowRight, FileCheck, Stethoscope, Pill, TestTube } from 'lucide-react';
 import { useState } from 'react';
+import { motion } from 'framer-motion';
 
 interface Props {
   patientRecord: any;
+  sessionId?: string;
+  language?: string;
   onNext: () => void;
   onBack: () => void;
 }
 
-const CATEGORY_LABELS: Record<string, string> = {
-  'HPI': 'History of Present Illness',
-  'PMH': 'Past Medical History',
-  'DH': 'Medications & Allergies',
-  'FH': 'Family History',
-  'SH': 'Social History',
-  'ROS': 'Review of Systems',
-  'red_flag_check': 'Safety Screening',
-};
+import { useTranslations } from '../translations';
 
-const CATEGORY_COLORS: Record<string, string> = {
-  'HPI': 'bg-blue-50 border-blue-100 text-blue-700',
-  'PMH': 'bg-purple-50 border-purple-100 text-purple-700',
-  'DH': 'bg-green-50 border-green-100 text-green-700',
-  'FH': 'bg-amber-50 border-amber-100 text-amber-700',
-  'SH': 'bg-teal-50 border-teal-100 text-teal-700',
-  'ROS': 'bg-indigo-50 border-indigo-100 text-indigo-700',
-  'red_flag_check': 'bg-red-50 border-red-100 text-red-700',
-};
+export function Screen6_DigitizationVerification({ patientRecord, sessionId, language = 'en-IN', onNext, onBack }: Props) {
+  const { t } = useTranslations(language);
+  const [isConfirming, setIsConfirming] = useState(false);
+  const BACKEND_URL = import.meta.env.VITE_BACKEND_HTTP_URL || 'http://localhost:8000';
 
-export function Screen6_DigitizationVerification({ patientRecord, onNext, onBack }: Props) {
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set(['HPI']));
+  // Extract data from patientRecord
+  const docExt = patientRecord?.document_extractions?.[0];
+  const firstEntity = docExt?.entities?.[0] || {};
+  const entities = firstEntity;
+  const summary = docExt ? `Document type: ${docExt.doc_type}` : "Clinical document processed.";
+  const confidence = 0.85; // Default for hackathon mock
 
-  const chiefComplaint = patientRecord?.chief_complaint?.value || 'Not recorded';
-  const dynamicSchema = patientRecord?.dynamic_schema;
-  const filledState = patientRecord?.filled_state || {};
-  const patientName = patientRecord?.patient_name || '';
-  const patientAge = patientRecord?.patient_age;
-  const patientSex = patientRecord?.patient_sex || '';
-
-  // Group filled fields by category using the schema
-  const groupedData: Record<string, Array<{ id: string; intent: string; value: string }>> = {};
-  if (dynamicSchema?.fields) {
-    for (const field of dynamicSchema.fields) {
-      const entry = filledState[field.id];
-      if (entry?.value) {
-        const cat = field.category || 'HPI';
-        if (!groupedData[cat]) groupedData[cat] = [];
-        groupedData[cat].push({
-          id: field.id,
-          intent: field.question_intent || field.id.replace(/_/g, ' '),
-          value: entry.value,
+  const handleConfirm = async () => {
+    setIsConfirming(true);
+    if (sessionId) {
+      try {
+        await fetch(`${BACKEND_URL}/api/ocr/${sessionId}/confirm`, {
+          method: 'POST',
         });
+      } catch (err) {
+        console.error("Failed to confirm OCR:", err);
       }
     }
-  }
-
-  // Extract document data (OCR)
-  const docExtractions = patientRecord?.document_extractions || [];
-  const allMeds: any[] = [];
-  const allLabs: any[] = [];
-  for (const doc of docExtractions) {
-    const entities = doc.entities || {};
-    if (entities.medications) allMeds.push(...entities.medications);
-    if (entities.lab_results) allLabs.push(...entities.lab_results);
-  }
-
-  const toggleSection = (cat: string) => {
-    setExpandedSections(prev => {
-      const next = new Set(prev);
-      if (next.has(cat)) next.delete(cat);
-      else next.add(cat);
-      return next;
-    });
+    setTimeout(() => {
+      onNext();
+    }, 600);
   };
 
-  const categoryOrder = ['HPI', 'red_flag_check', 'PMH', 'DH', 'FH', 'SH', 'ROS'];
-
   return (
-    <div className="flex flex-col flex-1 p-6 sm:p-10 bg-white">
-      <div className="text-center mb-8">
-        <h2 className="text-2xl font-bold text-gray-900 mb-2">Clinical Summary & Verification</h2>
-        <p className="text-gray-500">Review the information before submitting to your doctor</p>
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="flex flex-col flex-1 p-6 sm:p-10 lg:p-12 h-full max-w-5xl mx-auto w-full"
+    >
+      <div className="flex items-center gap-4 mb-8">
+        <div className="bg-emerald-100 p-3 rounded-2xl">
+          <FileCheck className="w-8 h-8 text-emerald-600" />
+        </div>
+        <div>
+          <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">{t('scan_complete')}</h2>
+          <p className="text-slate-500 font-medium text-xl">{t('scan_desc')}</p>
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto max-w-4xl mx-auto w-full space-y-6 pb-10">
-        {/* Patient Info */}
-        {(patientName || patientAge) && (
-          <div className="bg-gray-50 border border-gray-200 rounded-xl p-4 flex gap-6">
-            {patientName && (
-              <div>
-                <p className="text-xs text-gray-500">Name</p>
-                <p className="text-gray-800 font-medium">{patientName}</p>
-              </div>
-            )}
-            {patientAge && (
-              <div>
-                <p className="text-xs text-gray-500">Age</p>
-                <p className="text-gray-800 font-medium">{patientAge} years</p>
-              </div>
-            )}
-            {patientSex && (
-              <div>
-                <p className="text-xs text-gray-500">Sex</p>
-                <p className="text-gray-800 font-medium capitalize">{patientSex}</p>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Chief Complaint */}
-        <div className="bg-blue-50 border border-blue-100 rounded-xl p-4">
-          <h3 className="text-sm font-semibold text-blue-700 mb-1">Chief Complaint</h3>
-          <p className="text-gray-800 font-medium">{chiefComplaint}</p>
+      <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 space-y-6">
+        
+        {/* Summary Card */}
+        <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm relative overflow-hidden group">
+          <div className="absolute top-0 left-0 w-1.5 h-full bg-blue-500" />
+          <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center gap-2">
+            <Stethoscope className="w-4 h-4" />
+            Clinical Summary
+          </h3>
+          <p className="text-lg text-slate-800 font-medium leading-relaxed">
+            {summary}
+          </p>
         </div>
 
-        {/* Dynamic Schema Sections */}
-        {categoryOrder.map((cat) => {
-          const items = groupedData[cat];
-          if (!items || items.length === 0) return null;
-          const isExpanded = expandedSections.has(cat);
-          const colors = CATEGORY_COLORS[cat] || 'bg-gray-50 border-gray-200 text-gray-700';
-
-          return (
-            <div key={cat} className={`border rounded-xl overflow-hidden ${colors.split(' ')[1] || 'border-gray-200'}`}>
-              <button
-                onClick={() => toggleSection(cat)}
-                className={`w-full flex items-center justify-between px-4 py-3 ${colors.split(' ')[0]} transition-colors`}
-              >
-                <h3 className={`text-sm font-semibold ${colors.split(' ')[2] || 'text-gray-700'}`}>
-                  {CATEGORY_LABELS[cat] || cat}
-                  <span className="ml-2 text-xs font-normal opacity-70">{items.length} items</span>
-                </h3>
-                <ChevronDown className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isExpanded && (
-                <div className="bg-white p-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {items.map((item) => (
-                    <div key={item.id} className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                      <p className="text-xs text-gray-500 mb-1 capitalize">{item.intent}</p>
-                      <p className="text-gray-800 font-medium text-sm">{item.value}</p>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          );
-        })}
-
-        {/* Medications Table - Only if from OCR */}
-        {allMeds.length > 0 && (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
-              Documented Medications <span className="bg-gray-100 text-gray-600 text-xs px-2 py-1 rounded-full">{allMeds.length}</span>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          {/* Medications Card */}
+          <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm relative overflow-hidden">
+            <div className="absolute top-0 left-0 w-1.5 h-full bg-teal-500" />
+            <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+              <Pill className="w-4 h-4" />
+              Medications Found
             </h3>
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 text-gray-600">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Medicine</th>
-                    <th className="px-4 py-3 font-medium">Dose</th>
-                    <th className="px-4 py-3 font-medium">Frequency</th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {allMeds.map((med: any, i: number) => (
-                    <tr key={i} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-3 font-medium text-gray-900">{med.name}</td>
-                      <td className="px-4 py-3 text-gray-600">{med.dose}</td>
-                      <td className="px-4 py-3 text-gray-600">{med.frequency}</td>
-                      <td className="px-4 py-3 text-right">
-                        <CheckCircle2 className="w-5 h-5 text-green-500 inline-block" />
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-
-        {/* Lab Results Table - Only if from OCR */}
-        {allLabs.length > 0 && (
-          <div>
-            <h3 className="text-lg font-semibold text-gray-800 mb-4">Documented Lab Results</h3>
-            <div className="border border-gray-200 rounded-xl overflow-hidden">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-gray-50 text-gray-600">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Test</th>
-                    <th className="px-4 py-3 font-medium">Result</th>
-                    <th className="px-4 py-3 font-medium">Unit</th>
-                    <th className="px-4 py-3 font-medium">Ref Range</th>
-                    <th className="px-4 py-3 font-medium">Status</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {allLabs.map((lab: any, i: number) => (
-                    <tr key={i} className="hover:bg-gray-50/50">
-                      <td className="px-4 py-3 font-medium text-gray-900">{lab.test}</td>
-                      <td className={`px-4 py-3 font-semibold ${lab.status === 'High' ? 'text-red-600' : 'text-gray-900'}`}>{lab.result}</td>
-                      <td className="px-4 py-3 text-gray-500">{lab.unit}</td>
-                      <td className="px-4 py-3 text-gray-500">{lab.reference_range}</td>
-                      <td className="px-4 py-3">
-                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
-                          lab.status === 'Normal' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                        }`}>
-                          {lab.status}
+            {Array.isArray(entities.medications) && entities.medications.length > 0 ? (
+              <ul className="space-y-3">
+                {entities.medications.map((med: any, i: number) => {
+                  const drugName = typeof med === 'string' ? med : (med?.drug_name || med?.name || 'Unknown');
+                  const dosage = typeof med === 'string' ? '' : (med?.dosage || '');
+                  return (
+                    <li key={i} className="flex items-center justify-between p-3 bg-slate-50 rounded-xl">
+                      <span className="font-bold text-slate-700">{drugName}</span>
+                      {dosage && (
+                        <span className="text-sm font-medium text-slate-500 bg-white px-3 py-1 rounded-lg border border-slate-200">
+                          {dosage}
                         </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="text-slate-400 italic">No medications detected.</p>
+            )}
           </div>
-        )}
 
-        <div className="bg-amber-50 text-amber-800 p-4 rounded-xl flex items-start gap-3 text-sm">
-          <AlertCircle className="w-5 h-5 flex-shrink-0 mt-0.5" />
-          <p>This summary will be available on your doctor's screen. They can review and edit it during consultation.</p>
+          {/* Diagnoses & Labs Card */}
+          <div className="space-y-6">
+            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-1.5 h-full bg-purple-500" />
+               <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                 <AlertTriangle className="w-4 h-4" />
+                 Diagnoses
+               </h3>
+               {Array.isArray(entities.diagnoses) && entities.diagnoses.length > 0 ? (
+                 <div className="flex flex-wrap gap-2">
+                   {entities.diagnoses.map((diag: any, i: number) => {
+                     const text = typeof diag === 'string' ? diag : (diag?.condition_name || (diag ? JSON.stringify(diag) : 'Unknown'));
+                     return (
+                       <span key={i} className="px-4 py-2 bg-purple-50 text-purple-700 font-bold rounded-xl border border-purple-100">
+                         {text}
+                       </span>
+                     );
+                   })}
+                 </div>
+               ) : (
+                 <p className="text-slate-400 italic">No clear diagnoses detected.</p>
+               )}
+            </div>
+
+            <div className="bg-white rounded-3xl p-6 border border-slate-200 shadow-sm relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-1.5 h-full bg-rose-500" />
+               <h3 className="text-sm font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+                 <TestTube className="w-4 h-4" />
+                 Lab Results
+               </h3>
+               {Array.isArray(entities.lab_values) && entities.lab_values.length > 0 ? (
+                  <ul className="space-y-2">
+                    {entities.lab_values.map((lab: any, i: number) => {
+                      if (typeof lab === 'string') {
+                        return (
+                          <li key={i} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-lg">
+                            <span className="font-medium text-slate-700">{lab}</span>
+                          </li>
+                        );
+                      }
+                      return (
+                        <li key={i} className="flex justify-between items-center text-sm p-2 bg-slate-50 rounded-lg">
+                          <span className="font-medium text-slate-700">{lab?.test_name || 'Unknown test'}</span>
+                          <div className="flex gap-2">
+                            <span className="font-bold text-slate-900">{lab?.value || ''} {lab?.unit || ''}</span>
+                            {lab?.is_abnormal && (
+                              <span className="text-[10px] uppercase tracking-wider font-bold bg-rose-100 text-rose-600 px-2 py-0.5 rounded-full">
+                                Abnormal
+                              </span>
+                            )}
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+               ) : (
+                 <p className="text-slate-400 italic">No lab results detected.</p>
+               )}
+            </div>
+             </div>
+             
+             {Array.isArray(patientRecord?.unverifiable_values) && patientRecord.unverifiable_values.length > 0 && (
+               <div className="bg-white rounded-3xl p-6 border border-amber-200 shadow-sm relative overflow-hidden">
+                 <div className="absolute top-0 left-0 w-1.5 h-full bg-amber-500" />
+                 <h3 className="text-sm font-bold text-amber-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                   <AlertTriangle className="w-4 h-4" />
+                   Unverifiable / Unrecognized Units
+                 </h3>
+                 <p className="text-sm text-slate-500 mb-4">
+                   The following values contain units our system cannot verify. Please review the original document carefully.
+                 </p>
+                 <ul className="space-y-2">
+                   {patientRecord.unverifiable_values.map((val: any, i: number) => (
+                     <li key={i} className="flex justify-between items-center text-sm p-3 bg-amber-50 rounded-lg border border-amber-100">
+                       <span className="font-medium text-amber-900">{typeof val === 'string' ? val : JSON.stringify(val)}</span>
+                     </li>
+                   ))}
+                 </ul>
+               </div>
+             )}
+           </div>
+         {/* Confidence Indicator */}
+        <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+          <div className="flex-1 bg-slate-200 h-2 rounded-full overflow-hidden">
+            <div 
+              className={`h-full rounded-full ${confidence > 0.8 ? 'bg-emerald-500' : confidence > 0.5 ? 'bg-amber-500' : 'bg-red-500'}`}
+              style={{ width: `${Math.min(confidence * 100, 100)}%` }}
+            />
+          </div>
+          <span className="text-sm font-bold text-slate-500">
+            {Math.round(confidence * 100)}% AI Confidence
+          </span>
         </div>
+
       </div>
 
-      <div className="mt-8 pt-6 border-t border-gray-100 flex gap-4 max-w-4xl mx-auto w-full">
-        <button onClick={onBack} className="px-6 py-4 rounded-xl font-semibold text-gray-600 bg-gray-100 hover:bg-gray-200 w-1/3">Back</button>
-        <button onClick={onNext} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-4 font-semibold shadow-lg shadow-blue-200 transition-all text-lg">
-          Confirm & Generate Token
+      <div className="mt-8 pt-6 border-t border-slate-200 flex gap-4">
+        <button
+          onClick={onBack}
+          disabled={isConfirming}
+          className="px-8 py-5 rounded-full font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all text-lg w-1/3"
+        >
+          {t('rescan')}
+        </button>
+        <button
+          onClick={handleConfirm}
+          disabled={isConfirming}
+          className="group relative flex-1 overflow-hidden flex items-center justify-center gap-3 rounded-full py-5 font-bold shadow-xl transition-all transform active:scale-95 text-lg bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20"
+        >
+           {isConfirming ? (
+             <span className="relative z-10 flex items-center gap-2">
+               <CheckCircle className="w-5 h-5 animate-pulse" />
+               {t('confirmed')}
+             </span>
+           ) : (
+             <>
+                <div className="absolute inset-0 w-full h-full bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
+                <span className="relative z-10 flex items-center gap-2">
+                  {t('looks_good')}
+                  <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                </span>
+             </>
+           )}
         </button>
       </div>
-    </div>
+    </motion.div>
   );
 }

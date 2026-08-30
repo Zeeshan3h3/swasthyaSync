@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Globe, Volume2 } from 'lucide-react';
+import { Globe, Volume2, ArrowRight, Phone } from 'lucide-react';
 import { AbstractOrb } from '../components/AbstractOrb';
 import { useSarvamTTS } from '../hooks/useSarvamTTS';
+import { motion } from 'framer-motion';
 
 interface Props {
-  onStart: (clinicMode: string, language: string) => void;
+  onStart: (clinicMode: string, language: string, patientData: any) => void;
   isConnected: boolean;
 }
 
@@ -24,21 +25,23 @@ const LANGUAGES = [
 
 // Welcome greeting per language
 const GREETINGS: Record<string, string> = {
-  'en-IN': 'Welcome to MediKiosk. Please select your language to begin.',
-  'hi-IN': 'मेडीकियोस्क में आपका स्वागत है। शुरू करने के लिए अपनी भाषा चुनें।',
-  'ta-IN': 'மெடிகியோஸ்க்கிற்கு வரவேற்கிறோம். தொடங்க உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்।',
-  'te-IN': 'మెడీకియోస్క్‌కు స్వాగతం. ప్రారంభించడానికి మీ భాషను ఎంచుకోండి.',
-  'kn-IN': 'ಮೆಡಿಕಿಯೋಸ್ಕ್‌ಗೆ ಸ್ವಾಗತ. ಪ್ರಾರಂಭಿಸಲು ನಿಮ್ಮ ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ.',
-  'bn-IN': 'মেডিকিওস্কে আপনাকে স্বাগতম। শুরু করতে আপনার ভাষা নির্বাচন করুন।',
-  'mr-IN': 'मेडीकियोस्कमध्ये आपले स्वागत आहे। सुरू करण्यासाठी आपली भाषा निवडा।',
-  'gu-IN': 'મેડીકિઓસ્કમાં આપનું સ્વાગત છે। શરૂ કરવા માટે તમારી ભાષા પસંદ કરો.',
-  'ml-IN': 'മെഡിക്കിയോസ്‌കിലേക്ക് സ്വാഗതം. ആരംഭിക്കാൻ നിങ്ങളുടെ ഭാഷ തിരഞ്ഞെടുക്കുക.',
-  'pa-IN': 'ਮੈਡੀਕਿਓਸਕ ਵਿੱਚ ਤੁਹਾਡਾ ਸੁਆਗਤ ਹੈ। ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਆਪਣੀ ਭਾਸ਼ਾ ਚੁਣੋ।',
+  'en-IN': 'Welcome to SwasthyaSync. Please select your language to begin.',
+  'hi-IN': 'SwasthyaSync में आपका स्वागत है। शुरू करने के लिए अपनी भाषा चुनें।',
+  'ta-IN': 'SwasthyaSync க்கு வரவேற்கிறோம். தொடங்க உங்கள் மொழியைத் தேர்ந்தெடுக்கவும்.',
+  'te-IN': 'SwasthyaSync కు స్వాగతం. ప్రారంభించడానికి మీ భాషను ఎంచుకోండి.',
+  'kn-IN': 'SwasthyaSync ಗೆ ಸ್ವಾಗತ. ಪ್ರಾರಂಭಿಸಲು ನಿಮ್ಮ ಭಾಷೆ ಆಯ್ಕೆ ಮಾಡಿ.',
+  'bn-IN': 'SwasthyaSync এ আপনাকে স্বাগতম। শুরু করতে আপনার ভাষা নির্বাচন করুন।',
+  'mr-IN': 'SwasthyaSync मध्ये आपले स्वागत आहे। सुरू करण्यासाठी आपली भाषा निवडा।',
+  'gu-IN': 'SwasthyaSync માં આપનું સ્વાગત છે। શરૂ કરવા માટે તમારી ભાષા પસંદ કરો.',
+  'ml-IN': 'SwasthyaSync-ലേക്ക് സ്വാഗതം. ആരംഭിക്കാൻ നിങ്ങളുടെ ഭാഷ തിരഞ്ഞെടുക്കുക.',
+  'pa-IN': 'SwasthyaSync ਵਿੱਚ ਤੁਹਾਡਾ ਸੁਆਗਤ ਹੈ। ਸ਼ੁਰੂ ਕਰਨ ਲਈ ਆਪਣੀ ਭਾਸ਼ਾ ਚੁਣੋ।',
 };
 
 export function Screen1_Welcome({ onStart, isConnected }: Props) {
   const [selectedLang, setSelectedLang] = useState('en-IN');
   const [clinicMode, setClinicMode] = useState('allopathic');
+  const [phone, setPhone] = useState('');
+  const [isLookingUp, setIsLookingUp] = useState(false);
   const { speak, isSpeaking } = useSarvamTTS();
 
   // Auto-greet in selected language when language changes
@@ -53,79 +56,150 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
     speak(greeting, selectedLang);
   };
 
+  const handleStart = async () => {
+    if (!phone || phone.length < 10) {
+      alert("Please enter a valid 10-digit phone number");
+      return;
+    }
+    setIsLookingUp(true);
+    try {
+      // Use standard fetch convention without hardcoding localhost if possible, but fallback to it
+      const baseUrl = window.location.origin.replace(':5173', ':8000');
+      const res = await fetch(`${baseUrl}/api/patient/lookup-or-create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone })
+      });
+      if (res.ok) {
+        const patientData = await res.json();
+        onStart(clinicMode, selectedLang, patientData);
+      } else {
+        alert("Error looking up patient");
+      }
+    } catch (e) {
+      console.error(e);
+      alert("Network error connecting to backend");
+    } finally {
+      setIsLookingUp(false);
+    }
+  };
+
   return (
-    <div className="flex flex-col items-center justify-center flex-1 p-6 text-center">
-      <h2 className="text-3xl font-bold text-gray-900 mb-2">Welcome to MediKiosk</h2>
-      <p className="text-gray-500 mb-6">
-        {GREETINGS[selectedLang] || 'Your health, our priority'}
-      </p>
-
-      <div className="mb-8 relative">
-        <AbstractOrb interactionState={isSpeaking ? 'speaking' : 'idle'} />
-      </div>
-
-      {/* Language Selection — all 10 Sarvam-supported languages */}
-      <p className="text-sm font-medium text-gray-600 mb-3 flex items-center gap-2">
-        <Globe className="w-4 h-4" />
-        Select your preferred language / अपनी भाषा चुनें
-      </p>
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 w-full max-w-2xl mb-8">
-        {LANGUAGES.map((lang) => (
-          <button
-            key={lang.code}
-            id={`lang-${lang.code}`}
-            onClick={() => setSelectedLang(lang.code)}
-            className={`py-3 px-3 rounded-xl border-2 transition-all ${
-              selectedLang === lang.code
-                ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200'
-                : 'border-gray-200 bg-white text-gray-700 hover:border-blue-400 hover:bg-blue-50'
-            }`}
-          >
-            <div className="text-lg leading-tight">{lang.native}</div>
-            <div className={`text-xs mt-0.5 ${selectedLang === lang.code ? 'text-blue-100' : 'text-gray-400'}`}>
-              {lang.name}
-            </div>
-          </button>
-        ))}
-      </div>
-
-      {/* Clinic Mode */}
-      <p className="text-xs text-gray-400 mb-2">Department mode (resolved from appointment)</p>
-      <div className="flex gap-3 mb-8">
-        {['allopathic', 'ayush'].map((mode) => (
-          <button
-            key={mode}
-            id={`mode-${mode}`}
-            onClick={() => setClinicMode(mode)}
-            className={`px-5 py-2 rounded-lg text-sm font-medium transition-all ${
-              clinicMode === mode
-                ? 'bg-teal-600 text-white'
-                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
-            }`}
-          >
-            {mode.toUpperCase()}
-          </button>
-        ))}
-      </div>
-
-      <button
-        id="btn-start"
-        onClick={() => onStart(clinicMode, selectedLang)}
-        disabled={!isConnected}
-        className="w-full max-w-md bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 text-white rounded-xl py-4 font-semibold shadow-lg shadow-blue-200 transition-all transform active:scale-95 text-lg"
+    <motion.div 
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -20 }}
+      className="flex flex-col items-center flex-1 p-6 sm:p-12 text-center relative w-full min-h-[100%] overflow-y-auto"
+    >
+      {/* Background Decor */}
+      <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-blue-50/50 to-transparent pointer-events-none" />
+      
+      <motion.div 
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.1 }}
+        className="z-10 w-full max-w-4xl flex flex-col items-center mt-2"
       >
-        {isConnected ? 'Start Check-In' : 'Connecting to server...'}
-      </button>
+        <h1 className="text-5xl sm:text-7xl font-extrabold mb-2 tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-teal-500 pb-2">
+          SwasthyaSync
+        </h1>
+        <p className="text-xl text-slate-500 mb-4 max-w-2xl font-medium leading-relaxed">
+          {GREETINGS[selectedLang] || 'Your health, our priority'}
+        </p>
+      </motion.div>
 
-      {/* TTS replay button */}
-      <button
-        id="btn-replay-greeting"
-        onClick={handleReplayGreeting}
-        className="mt-6 flex items-center gap-2 text-blue-600 font-medium hover:underline"
+      <div className="mb-4 relative z-10 scale-75 sm:scale-90 my-2">
+        <AbstractOrb interactionState={isSpeaking ? 'speaking' : 'idle'} size="lg" />
+      </div>
+
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="z-10 w-full max-w-4xl flex flex-col items-center bg-white/90 backdrop-blur-2xl border border-white p-6 sm:p-8 rounded-[2rem] shadow-2xl shadow-slate-200/50"
       >
-        <Volume2 className={`w-5 h-5 ${isSpeaking ? 'animate-pulse' : ''}`} />
-        {isSpeaking ? 'Speaking...' : 'Tap to hear in selected language'}
-      </button>
-    </div>
+        {/* Language Selection */}
+        <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+          <Globe className="w-4 h-4 text-blue-500" />
+          Select Language / भाषा चुनें
+        </p>
+        
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 w-full mb-6">
+          {LANGUAGES.map((lang) => (
+            <button
+              key={lang.code}
+              id={`lang-${lang.code}`}
+              onClick={() => setSelectedLang(lang.code)}
+              className={`relative overflow-hidden flex flex-col items-center justify-center py-4 px-2 rounded-2xl border-2 transition-all duration-300 transform active:scale-95 cursor-pointer ${
+                selectedLang === lang.code
+                  ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-600/30 ring-2 ring-blue-600/20'
+                  : 'border-slate-100 bg-white text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:shadow-sm'
+              }`}
+            >
+              <div className="text-xl font-extrabold leading-tight mb-1">{lang.native}</div>
+              <div className={`text-xs font-semibold tracking-wide ${selectedLang === lang.code ? 'text-blue-100' : 'text-slate-400'}`}>
+                {lang.name}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        {/* Clinic Mode - Hidden in UI by default unless needed for demo, hardcoded nicely */}
+        <div className="flex flex-col items-center w-full max-w-lg">
+           <div className="flex w-full max-w-[200px] bg-slate-100 p-1 rounded-full mb-4">
+            {['allopathic', 'ayush'].map((mode) => (
+              <button
+                key={mode}
+                id={`mode-${mode}`}
+                onClick={() => setClinicMode(mode)}
+                className={`flex-1 py-1.5 rounded-full text-[10px] font-bold capitalize transition-all duration-300 cursor-pointer ${
+                  clinicMode === mode
+                    ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200'
+                    : 'text-slate-400 hover:text-slate-600'
+                }`}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+
+          <div className="w-full bg-slate-50/50 p-4 rounded-2xl shadow-inner border border-slate-200 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all duration-300 mb-6 group cursor-text">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2 flex items-center justify-center gap-2 group-focus-within:text-blue-600 transition-colors">
+              <Phone className="w-3 h-3" />
+              Enter Mobile Number
+            </label>
+            <input
+              type="tel"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
+              placeholder="00000 00000"
+              className="w-full bg-transparent border-none text-3xl sm:text-4xl font-extrabold text-center text-slate-900 placeholder:text-slate-200 focus:outline-none focus:ring-0 p-0 tracking-widest cursor-text"
+            />
+          </div>
+
+          <button
+            id="btn-start"
+            onClick={handleStart}
+            disabled={!isConnected || isLookingUp || phone.length < 10}
+            className="group relative w-full overflow-hidden bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-full py-4 font-extrabold shadow-xl shadow-slate-900/20 transition-all transform hover:-translate-y-1 active:scale-95 text-lg flex items-center justify-center gap-3 cursor-pointer border border-transparent disabled:border-slate-200"
+          >
+            <span className="relative z-10 flex items-center gap-2">
+              {isLookingUp ? 'Looking up...' : !isConnected ? 'Connecting...' : 'Start Check-In'}
+              {isConnected && !isLookingUp && <ArrowRight className="w-5 h-5 group-hover:translate-x-2 transition-transform" />}
+            </span>
+          </button>
+        </div>
+
+        {/* TTS replay button */}
+        <button
+          id="btn-replay-greeting"
+          onClick={handleReplayGreeting}
+          className="mt-4 flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold transition-colors bg-slate-100 hover:bg-slate-200 px-5 py-2 rounded-full text-xs cursor-pointer"
+        >
+          <Volume2 className={`w-4 h-4 ${isSpeaking ? 'text-blue-500 animate-pulse' : ''}`} />
+          {isSpeaking ? 'Speaking...' : 'Tap to hear instruction'}
+        </button>
+      </motion.div>
+    </motion.div>
   );
 }

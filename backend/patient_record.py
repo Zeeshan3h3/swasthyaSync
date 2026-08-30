@@ -1,5 +1,5 @@
-"""
-MediKiosk v4 — Unified Patient Record Schema
+﻿"""
+SwasthyaSync v4 — Unified Patient Record Schema
 
 Evolved for the dynamic schema-driven architecture:
   - Demographics (name, age, sex) collected at start
@@ -85,6 +85,7 @@ class RedFlagEntry(BaseModel):
 class PatientRecord(BaseModel):
     """The backbone schema — v4 with dynamic schema-driven interview."""
     session_id: str = Field(default_factory=lambda: f"sess_{uuid.uuid4().hex[:8]}")
+    patient_id: Optional[str] = None
     clinic_mode: str = "allopathic"
     macro_state: str = "INIT"
     language: str = "en-IN"
@@ -123,6 +124,7 @@ class PatientRecord(BaseModel):
     # ── Document intelligence ──
     document_extractions: list[DocumentExtraction] = Field(default_factory=list)
     contradictions: list[Contradiction] = Field(default_factory=list)
+    unverifiable_values: list[str] = Field(default_factory=list)
 
     # ── Safety ──
     red_flags: list[RedFlagEntry] = Field(default_factory=list)

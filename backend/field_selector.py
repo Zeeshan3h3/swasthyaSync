@@ -1,5 +1,5 @@
-"""
-MediKiosk v4 — Field Selector (non-LLM)
+﻿"""
+SwasthyaSync v4 — Field Selector (non-LLM)
 
 A deterministic priority function that selects the next field to ask about.
 No LLM calls — pure logic based on the dynamic schema and filled-state.

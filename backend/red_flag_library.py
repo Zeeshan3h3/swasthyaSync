@@ -1,5 +1,5 @@
-"""
-MediKiosk v4 — Red-Flag Reference Library
+﻿"""
+SwasthyaSync v4 — Red-Flag Reference Library
 
 A curated, complaint-category-indexed library of:
   1. Must-ask red-flag fields (injected into Stage 1 schema generation as grounding)
