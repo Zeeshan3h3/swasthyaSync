@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { OrbState } from '../components/AbstractOrb';
+import { getWsUrl } from '../config';
 
 // Types matching the backend's UI instruction format
 export interface UIOption {
@@ -69,8 +70,6 @@ interface UseConversationReturn {
   getRecord: () => void;
 }
 
-const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/session';
-
 export function useConversation(): UseConversationReturn {
   const [ui, setUi] = useState<UIInstruction | null>(null);
   const [orbState, setOrbState] = useState<OrbState>('idle');
@@ -82,7 +81,9 @@ export function useConversation(): UseConversationReturn {
   const connect = useCallback(() => {
     if (wsRef.current?.readyState === WebSocket.OPEN) return;
 
-    const ws = new WebSocket(WS_URL);
+    const targetWsUrl = getWsUrl();
+    console.log('[WS] Connecting to:', targetWsUrl);
+    const ws = new WebSocket(targetWsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {

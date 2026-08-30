@@ -3,6 +3,7 @@ import { Globe, Volume2, ArrowRight, Phone } from 'lucide-react';
 import { AbstractOrb } from '../components/AbstractOrb';
 import { useSarvamTTS } from '../hooks/useSarvamTTS';
 import { motion } from 'framer-motion';
+import { getApiBaseUrl } from '../config';
 
 interface Props {
   onStart: (clinicMode: string, language: string, patientData: any) => void;
@@ -63,8 +64,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
     }
     setIsLookingUp(true);
     try {
-      // Use standard fetch convention without hardcoding localhost if possible, but fallback to it
-      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+      const baseUrl = getApiBaseUrl();
       const res = await fetch(`${baseUrl}/api/patient/lookup-or-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

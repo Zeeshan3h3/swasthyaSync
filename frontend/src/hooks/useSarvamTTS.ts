@@ -7,6 +7,7 @@
  */
 
 import { useState, useRef, useCallback, useEffect } from 'react';
+import { getApiBaseUrl } from '../config';
 
 interface UseSarvamTTSReturn {
   speak: (text: string, language: string) => Promise<void>;
@@ -15,7 +16,7 @@ interface UseSarvamTTSReturn {
   error: string | null;
 }
 
-const BACKEND_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_HTTP_URL || 'http://localhost:8000';
+const BACKEND_URL = getApiBaseUrl();
 
 export function useSarvamTTS(): UseSarvamTTSReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);

@@ -15,7 +15,7 @@ export function Layout({ children, isConnected = true }: LayoutProps) {
       {/* Top status bar — hospital-grade */}
       <div className="w-full px-3 sm:px-8 py-1.5 flex items-center justify-between bg-slate-50 border-b border-slate-200 text-[11px] sm:text-xs shadow-xs z-50 relative">
         <div className="flex items-center gap-2 sm:gap-3 text-slate-500 font-medium">
-          <span className="hidden sm:inline">Smart India Hackathon 2025</span>
+          <span className="hidden sm:inline">Smart India Hackathon 2026</span>
           <span className="hidden sm:inline text-slate-400">•</span>
           <span className="text-slate-700 font-bold tracking-tight">SwasthyaSync v2.0</span>
         </div>
@@ -27,7 +27,7 @@ export function Layout({ children, isConnected = true }: LayoutProps) {
               : 'bg-red-100 text-red-700 border border-red-200'
           }`}>
             {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            {isConnected ? 'Online' : 'Offline'}
+            {isConnected ? 'Connected' : 'Disconnected'}
           </div>
         </div>
       </div>

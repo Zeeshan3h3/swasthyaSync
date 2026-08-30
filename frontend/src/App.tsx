@@ -11,10 +11,9 @@ import { Screen6_DigitizationVerification } from './screens/Screen6_Digitization
 import { Screen7_TriageAlert } from './screens/Screen7_TriageAlert';
 import { Screen8_Complete } from './screens/Screen8_Complete';
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 
-  (window.location.origin.includes('localhost') || window.location.origin.includes('127.0.0.1')
-    ? window.location.origin.replace(':5173', ':8000')
-    : 'https://swasthyasync-backend.onrender.com');
+import { getApiBaseUrl } from './config';
+
+const API_BASE_URL = getApiBaseUrl();
 
 function App() {
   const {
@@ -262,7 +261,7 @@ function App() {
   };
 
   return (
-    <Layout>
+    <Layout isConnected={isConnected}>
       {connectionBadge}
       <AnimatePresence mode="wait" initial={false}>
         <div key={ui?.screen || 'pending'} className="flex flex-col flex-1 h-full min-h-full">
