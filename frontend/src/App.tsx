@@ -208,7 +208,7 @@ function App() {
                 const formData = new FormData();
                 formData.append('file', file);
                 formData.append('session_id', ui.session_id);
-                const baseUrl = window.location.origin.replace(':5173', ':8000');
+                const baseUrl = getApiBaseUrl();
                 try {
                   await fetch(`${baseUrl}/api/ocr`, {
                     method: 'POST',

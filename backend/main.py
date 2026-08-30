@@ -115,13 +115,14 @@ async def upload_document(
     
     # Save the file locally so we can display it later
     import uuid
+    os.makedirs("uploads", exist_ok=True)
     safe_filename = f"{uuid.uuid4().hex[:8]}_{file.filename or 'doc.jpg'}"
     file_path = os.path.join("uploads", safe_filename)
     with open(file_path, "wb") as f:
         f.write(image_bytes)
 
     result = await process_document(image_bytes, filename=file.filename or "doc.jpg", media_type=content_type)
-    result["image_url"] = f"http://localhost:8000/uploads/{safe_filename}"
+    result["image_url"] = f"/uploads/{safe_filename}"
 
     # If we have a session, merge OCR entities into the patient record
     if session_id and session_id in sessions:
