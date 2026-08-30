@@ -1,4 +1,4 @@
-﻿"""
+"""
 SwasthyaSync — FastAPI Backend Server (Optimized)
 
 Changes:
@@ -302,6 +302,7 @@ async def text_to_speech_endpoint(
 # ──────────────────────────────────────────────────────────────────────
 
 @app.websocket("/ws/session")
+@app.websocket("/ws/intake")
 async def websocket_session(ws: WebSocket):
     """
     Real-time conversation WebSocket.
