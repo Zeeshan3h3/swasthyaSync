@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SwasthyaSync — WebSocket Conversation Hook
  *
  * Manages the WebSocket lifecycle to the backend Dialogue Manager.
@@ -69,7 +69,7 @@ interface UseConversationReturn {
   getRecord: () => void;
 }
 
-const WS_URL = 'ws://localhost:8000/ws/session';
+const WS_URL = import.meta.env.VITE_WS_URL || 'ws://localhost:8000/ws/session';
 
 export function useConversation(): UseConversationReturn {
   const [ui, setUi] = useState<UIInstruction | null>(null);

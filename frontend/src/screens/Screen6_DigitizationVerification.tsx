@@ -15,7 +15,7 @@ import { useTranslations } from '../translations';
 export function Screen6_DigitizationVerification({ patientRecord, sessionId, language = 'en-IN', onNext, onBack }: Props) {
   const { t } = useTranslations(language);
   const [isConfirming, setIsConfirming] = useState(false);
-  const BACKEND_URL = import.meta.env.VITE_BACKEND_HTTP_URL || 'http://localhost:8000';
+  const BACKEND_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_HTTP_URL || 'http://localhost:8000';
 
   // Extract data from patientRecord
   const docExt = patientRecord?.document_extractions?.[0];

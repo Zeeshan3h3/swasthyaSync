@@ -64,7 +64,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
     setIsLookingUp(true);
     try {
       // Use standard fetch convention without hardcoding localhost if possible, but fallback to it
-      const baseUrl = window.location.origin.replace(':5173', ':8000');
+      const baseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8000';
       const res = await fetch(`${baseUrl}/api/patient/lookup-or-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

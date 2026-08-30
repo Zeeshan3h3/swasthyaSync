@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SwasthyaSync — Sarvam AI Text-to-Speech Hook
  *
  * Sends text to the backend /api/tts endpoint (powered by Sarvam AI),
@@ -15,7 +15,7 @@ interface UseSarvamTTSReturn {
   error: string | null;
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_HTTP_URL || 'http://localhost:8000';
+const BACKEND_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_HTTP_URL || 'http://localhost:8000';
 
 export function useSarvamTTS(): UseSarvamTTSReturn {
   const [isSpeaking, setIsSpeaking] = useState(false);

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * SwasthyaSync — Sarvam AI Speech-to-Text Hook (Fixed & Optimized)
  *
  * Fixes:
@@ -30,7 +30,7 @@ interface UseSarvamSTTReturn {
   audioLevel: number; // 0-1, for visualizing mic input
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_HTTP_URL || 'http://localhost:8000';
+const BACKEND_URL = import.meta.env.VITE_API_URL || import.meta.env.VITE_BACKEND_HTTP_URL || 'http://localhost:8000';
 const MIN_RECORDING_MS = 500; // Don't send audio shorter than this
 
 export function useSarvamSTT(
