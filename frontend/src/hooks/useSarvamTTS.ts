@@ -70,6 +70,17 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
       });
 
       if (!response.ok) {
+        // Fallback to native Web Speech API if Sarvam is out of credits (402) or offline
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = language || 'hi-IN';
+          utterance.onstart = () => setIsSpeaking(true);
+          utterance.onend = () => setIsSpeaking(false);
+          utterance.onerror = () => setIsSpeaking(false);
+          window.speechSynthesis.speak(utterance);
+          return;
+        }
         throw new Error(`TTS failed: ${response.status}`);
       }
 
@@ -100,6 +111,20 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
       if (err?.name === 'AbortError') {
         // Ignored, we aborted the request on purpose
         return;
+      }
+      if ('speechSynthesis' in window) {
+        try {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = language || 'hi-IN';
+          utterance.onstart = () => setIsSpeaking(true);
+          utterance.onend = () => setIsSpeaking(false);
+          utterance.onerror = () => setIsSpeaking(false);
+          window.speechSynthesis.speak(utterance);
+          return;
+        } catch (e) {
+          console.error('WebSpeech fallback failed', e);
+        }
       }
       const msg = err instanceof Error ? err.message : 'TTS request failed';
       setError(msg);
