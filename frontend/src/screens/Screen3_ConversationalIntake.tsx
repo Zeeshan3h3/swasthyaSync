@@ -288,26 +288,26 @@ export function Screen3_ConversationalIntake({
             </button>
           </form>
 
-          <div className="flex items-center justify-between border-t border-slate-200 pt-4 pb-2">
+          <div className="flex items-center justify-between border-t border-slate-200 pt-3 pb-2 gap-2">
             <button
               id="btn-back"
               onClick={onBack}
-              className="group flex items-center justify-center gap-2 px-5 py-3 rounded-full font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-700 transition-all text-sm sm:text-base cursor-pointer"
+              className="group flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-700 transition-all text-xs sm:text-base cursor-pointer shrink-0"
             >
               <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" />
-              {t('back')}
+              <span className="hidden xs:inline">{t('back')}</span>
             </button>
 
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <button
                 id="btn-tts-toggle"
                 type="button"
                 aria-label={isSpeaking ? 'Stop speaking' : 'Replay prompt'}
                 onClick={() => isSpeaking ? stopTTS() : speak(ui.prompt || '', ui.language || 'hi-IN')}
                 title={isSpeaking ? 'Stop speaking' : 'Replay prompt'}
-                className="p-3 sm:p-3.5 rounded-full text-slate-400 bg-white border border-slate-200 hover:text-blue-500 hover:border-blue-200 hover:bg-blue-50 hover:shadow-sm transition-all"
+                className="p-2.5 sm:p-3.5 rounded-full text-slate-400 bg-white border border-slate-200 hover:text-blue-500 hover:border-blue-200 hover:bg-blue-50 hover:shadow-xs transition-all shrink-0"
               >
-                {isSpeaking ? <VolumeX className="w-5 h-5 sm:w-6 sm:h-6" /> : <Volume2 className="w-5 h-5 sm:w-6 sm:h-6" />}
+                {isSpeaking ? <VolumeX className="w-4 h-4 sm:w-6 sm:h-6" /> : <Volume2 className="w-4 h-4 sm:w-6 sm:h-6" />}
               </button>
 
               <div className="relative">
@@ -328,28 +328,28 @@ export function Screen3_ConversationalIntake({
                   onTouchEnd={handleMicRelease}
                   onTouchCancel={handleMicRelease}
                   disabled={isProcessing}
-                  className={`relative flex items-center gap-2.5 px-6 sm:px-8 py-3 sm:py-3.5 rounded-full font-bold text-white transition-all transform active:scale-95 shadow-lg text-base sm:text-lg ${
+                  className={`relative flex items-center justify-center gap-2 px-4 sm:px-8 py-2.5 sm:py-3.5 rounded-full font-bold text-white transition-all transform active:scale-95 shadow-md text-xs sm:text-lg ${
                     isRecording
                       ? 'bg-blue-600 shadow-blue-600/40 scale-105'
                       : 'bg-slate-900 shadow-slate-900/20 hover:bg-slate-800'
-                  } disabled:opacity-50 disabled:cursor-not-allowed`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 min-w-[130px] sm:min-w-[180px]`}
                 >
-                  {isRecording ? <Mic className="w-5 h-5 sm:w-6 sm:h-6 animate-pulse" /> : <Mic className="w-5 h-5 sm:w-6 sm:h-6" />}
-                  {isRecording ? t('release_to_send') : t('hold_to_speak')}
+                  {isRecording ? <Mic className="w-4 h-4 sm:w-6 sm:h-6 animate-pulse text-red-300" /> : <Mic className="w-4 h-4 sm:w-6 sm:h-6" />}
+                  <span>{isRecording ? t('release_to_send') : t('hold_to_speak')}</span>
                 </button>
               </div>
             </div>
 
-            <div className="w-[100px] sm:w-[120px] flex justify-end">
+            <div className="flex justify-end shrink-0">
               {ui.can_skip && (
                 <button
                   id="btn-skip"
                   type="button"
                   onClick={onSkip}
-                  className="flex items-center gap-1.5 px-4 sm:px-6 py-3 rounded-full font-bold text-slate-500 hover:bg-slate-100 transition-colors text-sm sm:text-base cursor-pointer"
+                  className="flex items-center gap-1 px-3 sm:px-6 py-2.5 sm:py-3 rounded-full font-bold text-slate-500 hover:bg-slate-100 transition-colors text-xs sm:text-base cursor-pointer"
                   title="Skip this question"
                 >
-                  {t('skip')}
+                  <span className="hidden xs:inline">{t('skip')}</span>
                   <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" />
                 </button>
               )}
