@@ -1,6 +1,6 @@
+import { LiquidButton } from '../components/ui/button';
 import { useState, useEffect } from 'react';
 import { Globe, Volume2, ArrowRight, Phone } from 'lucide-react';
-import { AbstractOrb } from '../components/AbstractOrb';
 import { useSarvamTTS } from '../hooks/useSarvamTTS';
 import { motion } from 'framer-motion';
 import { getApiBaseUrl } from '../config';
@@ -89,7 +89,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="flex flex-col items-center flex-1 p-4 sm:p-12 text-center relative w-full min-h-[100%] overflow-y-auto pb-12"
+      className="flex flex-col items-center p-4 sm:p-12 text-center relative w-full min-h-[100%] pb-24"
     >
       {/* Background Decor */}
       <div className="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-blue-50/50 to-transparent pointer-events-none" />
@@ -108,9 +108,6 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
         </p>
       </motion.div>
 
-      <div className="mb-2 sm:mb-4 relative z-10 scale-75 sm:scale-90 my-1 sm:my-2">
-        <AbstractOrb interactionState={isSpeaking ? 'speaking' : 'idle'} size="lg" />
-      </div>
 
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
@@ -126,7 +123,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
         
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 w-full mb-5">
           {LANGUAGES.map((lang) => (
-            <button
+            <LiquidButton
               key={lang.code}
               id={`lang-${lang.code}`}
               onClick={() => setSelectedLang(lang.code)}
@@ -140,7 +137,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
               <div className={`text-[10px] sm:text-xs font-semibold tracking-wide ${selectedLang === lang.code ? 'text-blue-100' : 'text-slate-400'}`}>
                 {lang.name}
               </div>
-            </button>
+            </LiquidButton>
           ))}
         </div>
 
@@ -148,7 +145,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
         <div className="flex flex-col items-center w-full max-w-lg">
            <div className="flex w-full max-w-[180px] sm:max-w-[200px] bg-slate-100 p-1 rounded-full mb-3 sm:mb-4">
             {['allopathic', 'ayush'].map((mode) => (
-              <button
+              <LiquidButton
                 key={mode}
                 id={`mode-${mode}`}
                 onClick={() => setClinicMode(mode)}
@@ -159,7 +156,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
                 }`}
               >
                 {mode}
-              </button>
+              </LiquidButton>
             ))}
           </div>
 
@@ -177,7 +174,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
             />
           </div>
 
-          <button
+          <LiquidButton
             id="btn-start"
             onClick={handleStart}
             disabled={!isConnected || isLookingUp || phone.length < 10}
@@ -187,18 +184,18 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
               {isLookingUp ? 'Looking up...' : !isConnected ? 'Connecting...' : 'Start Check-In'}
               {isConnected && !isLookingUp && <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1.5 transition-transform" />}
             </span>
-          </button>
+          </LiquidButton>
         </div>
 
         {/* TTS replay button */}
-        <button
+        <LiquidButton
           id="btn-replay-greeting"
           onClick={handleReplayGreeting}
           className="mt-3 sm:mt-4 flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold transition-colors bg-slate-100 hover:bg-slate-200 px-4 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs cursor-pointer"
         >
           <Volume2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isSpeaking ? 'text-blue-500 animate-pulse' : ''}`} />
           {isSpeaking ? 'Speaking...' : 'Tap to hear instruction'}
-        </button>
+        </LiquidButton>
       </motion.div>
     </motion.div>
   );

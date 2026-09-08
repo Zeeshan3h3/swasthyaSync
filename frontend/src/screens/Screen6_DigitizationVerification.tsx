@@ -1,3 +1,4 @@
+import { LiquidButton } from '../components/ui/button';
 import { CheckCircle, AlertTriangle, ArrowRight, FileCheck, Stethoscope, Pill, TestTube } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -23,7 +24,7 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
   const firstEntity = docExt?.entities?.[0] || {};
   const entities = firstEntity;
   const summary = docExt ? `Document type: ${docExt.doc_type}` : "Clinical document processed.";
-  const confidence = 0.85; // Default for hackathon mock
+  const confidence = docExt?.requires_human_verification ? 0.65 : 0.95;
 
   const handleConfirm = async () => {
     setIsConfirming(true);
@@ -199,14 +200,14 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
       </div>
 
       <div className="mt-8 pt-6 border-t border-slate-200 flex gap-4">
-        <button
+        <LiquidButton
           onClick={onBack}
           disabled={isConfirming}
           className="px-8 py-5 rounded-full font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all text-lg w-1/3"
         >
           {t('rescan')}
-        </button>
-        <button
+        </LiquidButton>
+        <LiquidButton
           onClick={handleConfirm}
           disabled={isConfirming}
           className="group relative flex-1 overflow-hidden flex items-center justify-center gap-3 rounded-full py-5 font-bold shadow-xl transition-all transform active:scale-95 text-lg bg-emerald-600 text-white hover:bg-emerald-500 shadow-emerald-600/20"
@@ -225,7 +226,7 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
                 </span>
              </>
            )}
-        </button>
+        </LiquidButton>
       </div>
     </motion.div>
   );

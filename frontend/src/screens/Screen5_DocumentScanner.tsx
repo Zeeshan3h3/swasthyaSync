@@ -1,7 +1,39 @@
+import { LiquidButton } from '../components/ui/button';
 import { useState, useRef } from 'react';
 import { Camera, UploadCloud, X, ArrowRight, FileText, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslations } from '../translations';
+import { useEffect } from 'react';
+
+function DynamicLoadingText() {
+  const [index, setIndex] = useState(0);
+  const messages = [
+    "Encrypting secure upload...",
+    "Scanning document structure...",
+    "Extracting clinical entities...",
+    "Cross-referencing medical databases...",
+    "Finalizing digitization..."
+  ];
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setIndex((prev) => (prev + 1) % messages.length);
+    }, 1500);
+    return () => clearInterval(interval);
+  }, [messages.length]);
+
+  return (
+    <motion.span 
+      key={index}
+      initial={{ opacity: 0, y: 5 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -5 }}
+      className="text-xs font-bold text-blue-900 uppercase tracking-wider"
+    >
+      {messages[index]}
+    </motion.span>
+  );
+}
 
 interface Props {
   language: string;
@@ -89,7 +121,7 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
         {!file ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 h-full max-h-[400px]">
             {/* Camera Option */}
-            <button
+            <LiquidButton
               onClick={() => cameraInputRef.current?.click()}
               className="group flex flex-col items-center justify-center bg-white border-2 border-dashed border-slate-200 rounded-3xl p-8 hover:border-blue-500 hover:bg-blue-50 transition-all duration-300"
             >
@@ -98,10 +130,10 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
               </div>
               <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('take_photo')}</h3>
               <p className="text-slate-500 font-medium">{t('hold_document')}</p>
-            </button>
+            </LiquidButton>
 
             {/* Upload Option */}
-            <button
+            <LiquidButton
               onClick={() => fileInputRef.current?.click()}
               className="group flex flex-col items-center justify-center bg-white border-2 border-dashed border-slate-200 rounded-3xl p-8 hover:border-teal-500 hover:bg-teal-50 transition-all duration-300"
             >
@@ -110,7 +142,7 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
               </div>
               <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('upload_file')}</h3>
               <p className="text-slate-500 font-medium">{t('pdf_or_image')}</p>
-            </button>
+            </LiquidButton>
           </div>
         ) : (
           <motion.div 
@@ -118,20 +150,20 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
             animate={{ scale: 1, opacity: 1 }}
             className="flex flex-col items-center justify-center bg-white border border-slate-200 rounded-3xl p-8 shadow-xl shadow-slate-200/50 h-full max-h-[400px] relative overflow-hidden"
           >
-            <button
+            <LiquidButton
               onClick={handleClear}
               disabled={isProcessing}
               className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-red-100 hover:text-red-600 text-slate-500 rounded-full transition-colors disabled:opacity-50"
             >
               <X className="w-6 h-6" />
-            </button>
+            </LiquidButton>
 
             {preview ? (
               <div className="w-48 h-48 sm:w-64 sm:h-64 rounded-2xl overflow-hidden mb-6 border-4 border-white shadow-lg relative">
                 {isProcessing && (
-                  <div className="absolute inset-0 bg-white/60 backdrop-blur-sm z-10 flex flex-col items-center justify-center">
-                    <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-2" />
-                    <span className="text-sm font-bold text-blue-900 uppercase tracking-widest">{t('scanning')}</span>
+                  <div className="absolute inset-0 bg-white/70 backdrop-blur-md z-10 flex flex-col items-center justify-center p-4 text-center">
+                    <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-3" />
+                    <DynamicLoadingText />
                   </div>
                 )}
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -155,14 +187,14 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
       </div>
 
       <div className="mt-auto pt-10 w-full max-w-4xl flex gap-6">
-        <button
+        <LiquidButton
           onClick={onSkip}
           disabled={isProcessing}
           className="group flex items-center justify-center gap-2 px-8 py-5 rounded-full font-extrabold text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all w-1/3 text-lg disabled:opacity-50 cursor-pointer"
         >
           {t('skip_this')}
-        </button>
-        <button
+        </LiquidButton>
+        <LiquidButton
           onClick={handleSubmit}
           disabled={!file || isProcessing}
           className={`group relative flex-1 overflow-hidden flex items-center justify-center gap-3 rounded-full py-5 font-extrabold shadow-2xl transition-all transform active:scale-95 text-xl cursor-pointer ${
@@ -184,7 +216,7 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
               </span>
             </>
           )}
-        </button>
+        </LiquidButton>
       </div>
     </motion.div>
   );

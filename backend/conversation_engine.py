@@ -149,6 +149,7 @@ def generate_question(
     chief_complaint: str = "",
     patient_age: int | None = None,
     patient_sex: str = "",
+    previous_history: dict | None = None,
 ) -> ConversationResult:
     """
     Generate one natural, conversational question for the target field.
@@ -237,6 +238,8 @@ OUTPUT FORMAT — Return ONLY a JSON object:
 === CONVERSATION SO FAR ===
 {context_text}
 
+{f"=== PAST MEDICAL CONTEXT (FOLLOW-UP VISIT) ==={chr(10)}The patient visited on {previous_history.get('completed_at', 'an earlier date')}.{chr(10)}Chief Complaint: {previous_history.get('chief_complaint')}{chr(10)}Diagnosis: {previous_history.get('small_summary')}{chr(10)}Prescription: {previous_history.get('doctor_prescription')}{chr(10)}Use this context to inform your questions if relevant, but stay focused on the current target field." if previous_history else ""}
+
 {"=== PATIENT'S LAST MESSAGE ===" + chr(10) + patient_message if patient_message else "This is the opening question. No patient message yet."}
 
 Generate your question about: {question_intent}"""
@@ -288,6 +291,7 @@ def generate_opening_question(
     patient_name: str = "",
     patient_age: int | None = None,
     patient_sex: str = "",
+    previous_history: dict | None = None,
 ) -> ConversationResult:
     """Generate the opening chief complaint question."""
     language_name = LANGUAGE_NAMES.get(language, "English")
@@ -299,11 +303,21 @@ def generate_opening_question(
     else:
         lang_rule = f"You MUST respond ENTIRELY in {language_name} using native script. spoken_text and label_translated must be in {language_name}."
 
+    follow_up_prompt = ""
+    if previous_history:
+        follow_up_prompt = f"""
+This is a FOLLOW-UP VISIT. The patient was here on {previous_history.get('completed_at')}.
+Previous diagnosis: {previous_history.get('small_summary')}
+Previous treatment: {previous_history.get('doctor_prescription')}
+Instead of a generic "what brings you here", ask how they are doing since their last visit regarding this issue, or if there is a new problem.
+"""
+
     system_prompt = f"""You are a compassionate medical kiosk assistant.
 {lang_rule}
 
 Generate a warm opening question to ask the patient what brings them here today.
 {"Address them as" + name_str + "." if name_str else ""}
+{follow_up_prompt}
 
 OUTPUT FORMAT — Return ONLY a JSON object:
 {{

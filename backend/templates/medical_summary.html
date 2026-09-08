@@ -1,0 +1,287 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>OP Casesheet - {{ patient.token }}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @page {
+            size: A4;
+            margin: 0;
+        }
+        body {
+            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            color: #1e293b;
+            background-color: #ffffff;
+            font-size: 11px;
+            line-height: 1.3;
+        }
+        .page-container {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 12mm 15mm 15mm 15mm;
+            margin: auto;
+            box-sizing: border-box;
+            position: relative;
+            background: white;
+        }
+        .page-break {
+            page-break-before: always;
+        }
+        .border-dotted-b {
+            border-bottom: 1px dotted #cbd5e1;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="page-container flex flex-col justify-between">
+        <div>
+            <!-- Header Block: Logo & Title -->
+            <div class="flex justify-between items-start border-b-2 border-slate-800 pb-2 mb-3">
+                <div class="flex items-center gap-3">
+                    <img src="{{ logo_b64 }}" class="h-20 w-auto object-contain" alt="Hospital Logo" />
+                </div>
+                <div class="text-right">
+                    <h2 class="text-lg font-black text-slate-800 tracking-wider">OP CASESHEET</h2>
+                    <p class="text-[10px] font-bold text-slate-600">TOKEN: <span class="text-slate-900 text-sm font-black">{{ patient.token }}</span></p>
+                </div>
+            </div>
+
+            <!-- Priority Emergency Banner -->
+            {% if red_flag_active %}
+            <div class="bg-red-50 border-l-4 border-red-600 p-2 mb-3 rounded-r flex items-center justify-between">
+                <div>
+                    <span class="text-red-700 font-black text-xs uppercase tracking-wider">🚨 PRIORITY TRIAGE ESCALATION DETECTED</span>
+                    <p class="text-red-900 font-semibold text-[10px] mt-0.5">{{ triage_reason }}</p>
+                </div>
+                <span class="bg-red-600 text-white font-black text-[9px] px-2 py-1 rounded tracking-widest uppercase">URGENT</span>
+            </div>
+            {% endif %}
+
+            <!-- Demographics (Updated with Address) -->
+            <div class="flex justify-between text-[11px] border-b border-slate-300 pb-4 mb-4">
+                <!-- Left Column -->
+                <div class="w-1/2 grid grid-cols-[130px_1fr] gap-y-1">
+                    <div class="text-slate-500">Patient MRN / ABHA</div>
+                    <div class="font-bold">: {{ patient.abha_id | default('91-8273-1928-10') }}</div>
+                    
+                    <div class="text-slate-500">Patient Name</div>
+                    <div class="font-bold">: {{ patient.name }}</div>
+                    
+                    <div class="text-slate-500">Sex/Age</div>
+                    <div class="font-bold">: {{ patient.gender }}, {{ patient.age }}y</div>
+                    
+                    <div class="text-slate-500">Address</div>
+                    <div class="font-bold leading-tight">: {{ patient.address | default('Kolkata, West Bengal, India, 700039') }}</div>
+            
+                    <div class="text-slate-500 mt-2">Visit Number</div>
+                    <div class="font-bold mt-2">: {{ patient.token }}</div>
+                    
+                    <div class="text-slate-500">Consultation Type</div>
+                    <div class="font-bold">: {{ patient.visit_type | default('OP, New Visit') }}
+                        {% if previous_history %}<span class="text-blue-600 font-black"> (Follow-Up)</span>{% endif %}
+                    </div>
+                    
+                    <div class="text-slate-500">Mobile Number</div>
+                    <div class="font-bold">: {{ patient.phone }}</div>
+                </div>
+                
+                <!-- Right Column -->
+                <div class="w-5/12 grid grid-cols-[120px_1fr] gap-y-1">
+                    <div class="text-slate-500">Date</div>
+                    <div class="font-bold">: {{ timestamp }}</div>
+                    
+                    <div class="text-slate-500">Department</div>
+                    <div class="font-bold">: {{ department | default('NEPHROLOGY') }}</div>
+                    
+                    <div class="text-slate-500">Consultant</div>
+                    <div class="font-bold">: {{ doctor_name | default('Dr. Deepak Shankar Ray') }}</div>
+                    
+                    <div class="text-slate-500">Ref. Hospital</div>
+                    <div class="font-bold">: -</div>
+                    
+                    <div class="text-slate-500">Ref. Doctor</div>
+                    <div class="font-bold">: -</div>
+                    
+                    <div class="text-slate-500">Sponsor Name</div>
+                    <div class="font-bold">: -</div>
+                </div>
+            </div>
+
+            <!-- The Classic Left-Spine Layout -->
+            <div class="text-[11px] space-y-6">
+                
+                <!-- Vitals -->
+                <div class="flex">
+                    <div class="w-[200px] font-bold text-slate-800 uppercase">VITALS</div>
+                    <div class="w-full flex justify-between">
+                        <div class="grid grid-cols-[80px_1fr] gap-y-1 w-1/3">
+                            <div class="text-slate-500">BP (mmHg)</div>
+                            <div class="font-bold">: {{ vitals.bp | default('   /   ') }}</div>
+                            <div class="text-slate-500">Pulse (bpm)</div>
+                            <div class="font-bold">: {{ vitals.hr | default('   ') }}</div>
+                        </div>
+                        <div class="grid grid-cols-[100px_1fr] gap-y-1 w-1/3">
+                            <div class="text-slate-500">Heart Rate(bpm)</div>
+                            <div class="font-bold">: {{ vitals.hr | default('   ') }}</div>
+                            <div class="text-slate-500">Weight (kg)</div>
+                            <div class="font-bold">: {{ vitals.weight | default('   ') }}</div>
+                        </div>
+                        <div class="grid grid-cols-[70px_1fr] gap-y-1 w-1/3">
+                            <div class="text-slate-500">Temp (°F)</div>
+                            <div class="font-bold">: {{ vitals.temp | default('   ') }}</div>
+                            <div class="text-slate-500">SpO2</div>
+                            <div class="font-bold">: {{ vitals.spo2 | default('   ') }}%</div>
+                        </div>
+                    </div>
+                </div>
+            
+                <!-- HPI (AI Injected) -->
+                <div class="flex">
+                    <div class="w-[200px] font-bold text-slate-800 uppercase">CHIEF COMPLAINTS AND HPI</div>
+                    <div class="w-full text-slate-900 font-mono leading-relaxed text-[11.5px] pr-8">
+                        {% if ai_summary.clinical_narrative %}
+                            ** AI SYNTHESIZED TRIAGE **<br>
+                            {{ ai_summary.clinical_narrative }}
+                        {% else %}
+                            <br><br><br> <!-- Blank space for doctor to write -->
+                        {% endif %}
+                    </div>
+                </div>
+            
+                <!-- General Exam -->
+                <div class="flex pt-4">
+                    <div class="w-[200px] font-bold text-slate-800 uppercase">GENERAL EXAMINATION</div>
+                    <div class="w-full grid grid-cols-[150px_1fr] gap-y-1">
+                        <div class="text-slate-500">Allergies Status:</div>
+                        <div class="font-bold">: Known/Unknown</div>
+                        <div class="text-slate-500">Built Status:</div>
+                        <div class="font-bold">: Cachectic/ Thin Built/ Average Built/ Obese/ Normal</div>
+                    </div>
+                </div>
+                
+                <div class="flex">
+                    <div class="w-[200px] font-bold text-slate-800 uppercase">SYSTEMIC EXAMINATION</div>
+                    <div class="w-full min-h-[40px]"></div>
+                </div>
+            
+                <!-- Investigations (OCR Injected Labs) -->
+                <div class="flex">
+                    <div class="w-[200px] font-bold text-slate-800 uppercase">INVESTIGATIONS</div>
+                    <div class="w-full text-slate-900 font-mono leading-relaxed">
+                        {% if ocr_data.extracted_labs %}
+                            ** OCR EXTRACTED FROM PAST RECORDS **<br>
+                            {% for lab in ocr_data.extracted_labs %}
+                                {{ lab.parameter }} - {{ lab.value }} {% if lab.is_abnormal %} <span class="font-bold text-slate-900">(ABNORMAL)</span> {% endif %}<br>
+                            {% endfor %}
+                        {% else %}
+                            <br><br><br> <!-- Blank space for handwriting -->
+                        {% endif %}
+                    </div>
+                </div>
+            
+                <!-- Treatment (OCR Injected Meds & Final Prescription) -->
+                <div class="flex">
+                    <div class="w-[200px] font-bold text-slate-800 uppercase">TREATMENT SUGGESTED</div>
+                    <div class="w-full text-slate-900 font-mono leading-relaxed">
+                        {% if doctor_prescription %}
+                            ** DOCTOR'S FINAL PRESCRIPTION & NOTES **<br>
+                            {{ doctor_prescription }}
+                            <br><br>
+                        {% endif %}
+                        
+                        {% if ocr_data.extracted_medications %}
+                            ** OCR ACTIVE MEDICATIONS **<br>
+                            {% for med in ocr_data.extracted_medications %}
+                                {{ med.name }} {{ med.dosage }} ({{ med.frequency }})<br>
+                            {% endfor %}
+                        {% elif not doctor_prescription %}
+                            <br><br><br><br> <!-- Blank space for handwriting -->
+                        {% endif %}
+                    </div>
+                </div>
+            
+            </div>
+        </div>
+
+        <!-- Document Footer Block -->
+        <div class="mt-4 pt-2 border-t-2 border-slate-800">
+            <div class="flex justify-between items-end text-[8.5px] text-slate-600 mb-2">
+                <div>
+                    <p>Generated By: <span class="font-bold text-slate-800">SwasthyaSync MediKiosk Engine</span></p>
+                    <p>Generated On: <span class="font-bold text-slate-800">{{ timestamp }}</span></p>
+                </div>
+                <div class="text-center min-w-[150px]">
+                    <div class="h-8 border-b border-slate-400 mb-1"></div>
+                    <p class="font-bold text-slate-800 uppercase text-[9px]">Attending Physician Signature</p>
+                </div>
+                <div class="text-right">
+                    <p class="font-bold text-slate-800">Page 1 of {% if uploaded_images %}2{% else %}1{% endif %}</p>
+                </div>
+            </div>
+
+            <!-- Footer Accreditation & Institution Bar -->
+            <div class="bg-slate-900 text-white rounded p-2 flex justify-between items-center text-[8px]">
+                <div>
+                    <p class="font-bold text-[9px] tracking-wide">{{ hospital_name | default('SWASTHYASYNC HEALTHCARE ACADEMY') }}</p>
+                    <p class="text-slate-300">Premises No. 1489, Sector V, Salt Lake, Kolkata, WB - 700091</p>
+                    <p class="text-slate-400">ABDM Facility ID: IN192830192 | Contact: 1800-123-4567</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <div class="text-right border-r border-slate-700 pr-2">
+                        <span class="block font-bold text-slate-200">ABDM & DPDP</span>
+                        <span class="text-slate-400">Compliant Platform</span>
+                    </div>
+                    <div class="bg-white p-0.5 rounded">
+                        <!-- QR Code Placeholder for EMR verification -->
+                        <img src="https://api.qrserver.com/v1/create-qr-code/?size=36x36&data={{ patient.token }}" class="h-8 w-8" alt="QR Code" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Page 2+: Chronological Source Document Appendices -->
+    {% if uploaded_images %}
+    <div class="page-container page-break flex flex-col justify-between">
+        <div>
+            <!-- Appendix Header -->
+            <div class="flex justify-between items-center border-b-2 border-slate-800 pb-2 mb-4">
+                <div>
+                    <h2 class="text-lg font-black text-slate-900">APPENDIX: UPLOADED SOURCE DOCUMENTS</h2>
+                    <p class="text-[9.5px] font-bold text-slate-500">
+                        TOKEN: {{ patient.token }} | PATIENT: {{ patient.name }} (ABHA: {{ patient.abha_id | default('N/A') }})
+                    </p>
+                </div>
+                <span class="bg-slate-100 text-slate-800 text-[9px] font-bold px-2 py-1 rounded border border-slate-300">
+                    Chronological Order
+                </span>
+            </div>
+
+            <!-- Image Grid -->
+            <div class="space-y-6">
+                {% for img in uploaded_images %}
+                <div class="border border-slate-300 rounded p-2 bg-slate-50">
+                    <div class="flex justify-between text-[9px] font-bold text-slate-600 mb-1 border-b border-slate-200 pb-0.5">
+                        <span>Document #{{ loop.index }}</span>
+                        <span>Source: Patient Kiosk Scanner</span>
+                    </div>
+                    <div class="flex justify-center">
+                        <img src="{{ img }}" class="max-h-[220mm] w-auto object-contain rounded border border-slate-200" alt="Source Document {{ loop.index }}" />
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- Appendix Footer -->
+        <div class="pt-2 border-t border-slate-300 flex justify-between text-[8.5px] text-slate-500">
+            <span>SwasthyaSync Optical Audit Verification</span>
+            <span>Page 2 of 2</span>
+        </div>
+    </div>
+    {% endif %}
+
+</body>
+</html>

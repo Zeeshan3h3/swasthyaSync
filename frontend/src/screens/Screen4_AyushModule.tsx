@@ -1,3 +1,4 @@
+import { LiquidButton } from '../components/ui/button';
 import { CheckCircle2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -47,7 +48,7 @@ export function Screen4_AyushModule({ send }: { send: any }) {
               {cat.options.map(opt => {
                 const isSelected = selections[cat.id] === opt;
                 return (
-                  <button
+                  <LiquidButton
                     key={opt}
                     onClick={() => handleSelect(cat.id, opt)}
                     className={`px-5 py-2.5 rounded-full text-sm font-medium transition-all ${
@@ -57,7 +58,7 @@ export function Screen4_AyushModule({ send }: { send: any }) {
                     }`}
                   >
                     {opt}
-                  </button>
+                  </LiquidButton>
                 );
               })}
             </div>
@@ -66,19 +67,19 @@ export function Screen4_AyushModule({ send }: { send: any }) {
       </div>
 
       <div className="mt-6 flex gap-4 pt-6 border-t border-slate-100 max-w-2xl mx-auto w-full">
-        <button 
+        <LiquidButton 
           onClick={() => send({ type: 'PREV' })}
           className="px-6 py-4 rounded-full font-semibold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-colors w-1/3"
         >
           Back
-        </button>
-        <button 
+        </LiquidButton>
+        <LiquidButton 
           onClick={() => send({ type: 'NEXT' })}
           className="flex-1 bg-blue-600 hover:bg-blue-700 text-white rounded-full py-4 font-semibold shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2"
         >
           <CheckCircle2 className="w-5 h-5" />
           Confirm & Next
-        </button>
+        </LiquidButton>
       </div>
     </div>
   );

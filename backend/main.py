@@ -20,13 +20,18 @@ import json
 import logging
 import time
 import asyncio
+import sys
+
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
+
 from contextlib import asynccontextmanager
 from typing import List
 from dotenv import load_dotenv
 
 load_dotenv()  # Load .env before anything else
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Response
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect, UploadFile, File, Form, Response, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +43,7 @@ from dialogue_manager import DialogueManager
 from ocr_pipeline import process_document
 import sarvam_client
 from routes_extended import extended_router, set_sessions_ref, escalate_queue_priority
+from routes_admin import admin_router
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,9 +58,21 @@ sessions: dict[str, DialogueManager] = {}
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("SwasthyaSync backend starting...")
+    from database import setup_database
+    setup_database()
+    from pdf_generator import pdf_engine
+    try:
+        await pdf_engine.start()
+        logger.info("PDFEngine started.")
+    except Exception as e:
+        logger.error(f"Failed to start PDFEngine: {e}")
     yield
     logger.info("SwasthyaSync backend shutting down.")
-
+    try:
+        await pdf_engine.stop()
+        logger.info("PDFEngine stopped.")
+    except Exception as e:
+        logger.error(f"Failed to stop PDFEngine: {e}")
 
 app = FastAPI(
     title="SwasthyaSync API",
@@ -73,8 +91,11 @@ app.add_middleware(
 )
 
 app.include_router(extended_router)
+app.include_router(admin_router)
 set_sessions_ref(sessions)  # Bridge: let routes_extended read live PatientRecord data
 
+os.makedirs("static/prescriptions", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
@@ -110,6 +131,7 @@ async def upload_document(
     session_id: str = Form(""),
 ):
     """Upload a document image for OCR processing."""
+    logger.info(f"Starting OCR upload for session_id: {session_id}, filename: {file.filename}")
     image_bytes = await file.read()
     content_type = file.content_type or "image/jpeg"
     
@@ -124,13 +146,23 @@ async def upload_document(
     result["image_url"] = f"/uploads/{safe_filename}"
 
     # If we have a session, merge OCR entities into the patient record
+    logger.info(f"upload_document received session_id: {session_id}, in sessions? {session_id in sessions}")
     if session_id and session_id in sessions:
+        logger.info(f"Found session in upload_document: {session_id}")
+        logger.info(f"Entities to append: meds={len(result.get('medications', []))}, diags={len(result.get('diagnoses', []))}")
         dm = sessions[session_id]
         from patient_record import DocumentExtraction
+        import database
+        
+        # Save to DB
+        meds = result.get("medications", [])
+        labs = result.get("diagnoses", [])
+        # database.save_uploaded_document does not exist, so we skip it
+        # and directly append the DocumentExtraction to the record.
         doc_ext = DocumentExtraction(
-            doc_id=result.get("doc_id", "unknown"),
+            doc_id="doc_" + str(int(time.time())),
             doc_type=result.get("document_type", "unknown"),
-            ocr_path=result["image_url"], # store image url here
+            ocr_path=f"/uploads/{safe_filename}",
             entities=[result],
         )
         dm.record.document_extractions.append(doc_ext)
@@ -155,7 +187,9 @@ async def upload_document_batch(
     tasks = [process_single_file(f) for f in files]
     results = await asyncio.gather(*tasks)
     
+    logger.info(f"upload_document received session_id: {session_id}, in sessions? {session_id in sessions}")
     if session_id and session_id in sessions:
+        logger.info(f"Found session in upload_document: {session_id}")
         dm = sessions[session_id]
         from patient_record import DocumentExtraction
         for res in results:
@@ -303,7 +337,7 @@ async def text_to_speech_endpoint(
 
 @app.websocket("/ws/session")
 @app.websocket("/ws/intake")
-async def websocket_session(ws: WebSocket):
+async def websocket_session(ws: WebSocket, session_id: str = Query(None)):
     """
     Real-time conversation WebSocket.
 
@@ -321,6 +355,12 @@ async def websocket_session(ws: WebSocket):
     """
     await ws.accept()
     dm: DialogueManager | None = None
+
+    if session_id and session_id in sessions:
+        dm = sessions[session_id]
+        logger.info(f"Rehydrated session: {session_id}")
+        ui = dm.resume_session()
+        await ws.send_json({"type": "ui", **ui})
 
     try:
         while True:
@@ -343,12 +383,23 @@ async def websocket_session(ws: WebSocket):
                 patient_name = msg.get("patient_name", "")
                 patient_age = msg.get("patient_age")
                 patient_sex = msg.get("patient_sex", "")
+                patient_weight = msg.get("patient_weight")
+                patient_height = msg.get("patient_height")
+                patient_vitals = msg.get("patient_vitals")
                 if patient_name or patient_age or patient_sex:
                     dm.set_demographics(
                         name=patient_name,
                         age=int(patient_age) if patient_age else None,
                         sex=patient_sex,
+                        weight=float(patient_weight) if patient_weight else None,
+                        height=patient_height,
+                        vitals=patient_vitals,
                     )
+                
+                # Check for follow-up history
+                previous_history = msg.get("previous_history")
+                if previous_history:
+                    dm.set_previous_history(previous_history)
 
                 # Bridge: set patient_id so summaries/queue can find this patient
                 patient_id = msg.get("patient_id")
@@ -419,57 +470,7 @@ async def websocket_session(ws: WebSocket):
                             reasons = "; ".join(f"{f.rule_id}: {f.description}" for f in new_flags)
                             escalate_queue_priority(dm.record.session_id, reasons)
                             
-                # PDF Generation fires HERE (once queue placement is final)
-                if prev_state == "SUMMARY_CONFIRMATION" and new_state == "COMPLETE":
-                    try:
-                        import os, uuid
-                        from datetime import datetime
-                        from pdf_generator import generate_summary_pdf
-                        from routes_extended import _get_db
-                        
-                        conn = _get_db()
-                        existing = conn.execute("SELECT 1 FROM summaries WHERE session_id = ? AND type = 'kiosk' AND pdf_path IS NOT NULL", (dm.record.session_id,)).fetchone()
-                        if not existing:
-                            q_row = conn.execute("SELECT priority_flag, priority_reason FROM queue WHERE session_id = ?", (dm.record.session_id,)).fetchone()
-                            token_id = ""
-                            q_tok_row = conn.execute("SELECT token_id FROM queue WHERE session_id = ?", (dm.record.session_id,)).fetchone()
-                            if q_tok_row: token_id = q_tok_row["token_id"]
-                            
-                            pdf_data = dm.record.model_dump()
-                            pdf_data["priority_flag"] = bool(q_row["priority_flag"]) if q_row else False
-                            pdf_data["priority_reason"] = q_row["priority_reason"] if q_row else ""
-                            pdf_data["token_id"] = token_id
-                            pdf_data["clinic_mode"] = dm.clinic_mode
-                            
-                            pdf_bytes = generate_summary_pdf(pdf_data)
-                            logger.info(f"PDF bytes generated: {len(pdf_bytes)} bytes")
-                            summary_id = f"sum_{uuid.uuid4().hex[:8]}"
-                            pdf_dir = os.path.join(os.path.dirname(__file__), "generated_pdfs")
-                            os.makedirs(pdf_dir, exist_ok=True)
-                            pdf_path = os.path.join(pdf_dir, f"{summary_id}.pdf")
-                            with open(pdf_path, "wb") as f:
-                                f.write(pdf_bytes)
-                                
-                            sess = conn.execute("SELECT patient_id FROM patient_sessions WHERE session_id = ?", (dm.record.session_id,)).fetchone()
-                            if sess:
-                                now = datetime.utcnow().isoformat()
-                                content_json = _json.dumps({
-                                    "note": "PDF generated at COMPLETE"
-                                })
-                                conn.execute(
-                                    "INSERT INTO summaries (summary_id, patient_id, session_id, type, content, created_at, pdf_path) VALUES (?, ?, ?, 'kiosk', ?, ?, ?)",
-                                    (summary_id, sess["patient_id"], dm.record.session_id, content_json, now, pdf_path)
-                                )
-                                conn.commit()
-                                logger.info(f"PDF saved to DB: summary_id={summary_id}, session_id={dm.record.session_id}")
-                            else:
-                                logger.error(f"No patient_sessions row for session_id={dm.record.session_id} — PDF written to disk but NOT saved to DB!")
-                            logger.info(f"PDF generated for session {dm.record.session_id} at {pdf_path}")
-                        else:
-                            logger.info(f"PDF already exists for session {dm.record.session_id}, skipping")
-                        conn.close()
-                    except Exception as pdf_exc:
-                        logger.error(f"PDF Generation failed: {pdf_exc}", exc_info=True)
+                # PDF Generation fires on-demand via the GET endpoint in routes_extended.py
 
                 # Bridge: if red flags fired (from dialogue), escalate queue priority automatically
                 if dm.record.red_flags and dm.fsm.state == "EMERGENCY_PROTOCOL":
@@ -506,6 +507,7 @@ async def websocket_session(ws: WebSocket):
 
     except WebSocketDisconnect:
         logger.info("WebSocket disconnected")
+        # Session intentionally left in memory for rehydration
     except Exception as e:
         logger.error(f"WebSocket error: {e}", exc_info=True)
         try:

@@ -134,6 +134,7 @@ def _generate_json_with_retry(
                     system_instruction=system_prompt,
                     response_mime_type="application/json",
                     temperature=temperature,
+                    max_output_tokens=1024,
                     automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
                 )
                 
@@ -297,4 +298,46 @@ def _mock_doc_extract(ocr_text: str) -> dict:
             {"test": "WBC Count", "result": "8200", "unit": "/μL", "reference_range": "4000-11000", "status": "Normal"},
         ],
         "procedures": [],
+    }
+
+# ──────────────────────────────────────────────────────────────────────
+# Clinical Synthesis
+# ──────────────────────────────────────────────────────────────────────
+
+def generate_clinical_summary(filled_state: dict, doc_extractions: list = None) -> dict:
+    """Synthesize the Q&A state into a structured 200-word clinical narrative."""
+    client = _get_client()
+    if client is None:
+        return _mock_clinical_summary(filled_state)
+
+    system_prompt = """You are an expert physician assistant. Write a concise, professional clinical handover note (approx 200 words).
+Synthesize the patient's history, symptoms, and extracted medical document information.
+Output JSON format:
+{
+  "clinical_narrative": "Patient is a ...",
+  "critical_highlights": ["Finding 1", "Finding 2"],
+  "contradictions": ["Contradiction 1", "Contradiction 2"]
+}
+Keep it objective and medically accurate."""
+
+    user_prompt = f"Patient Q&A History:\n{json.dumps(filled_state, indent=2)}\n\nDocument Extractions:\n{json.dumps(doc_extractions or [], indent=2)}"
+    
+    try:
+        return _generate_json_with_retry(
+            client,
+            system_prompt,
+            user_prompt,
+            temperature=0.2,
+        )
+    except Exception as e:
+        logger.error(f"LLM generate_clinical_summary failed: {e}")
+        return _mock_clinical_summary(filled_state)
+
+
+def _mock_clinical_summary(filled_state: dict) -> dict:
+    """Mock clinical summary."""
+    return {
+        "clinical_narrative": "Patient presents with reported symptoms in the provided history. Vital signs and physical examination required for further assessment.",
+        "critical_highlights": ["Awaiting detailed clinical evaluation", "Review provided symptom history"],
+        "contradictions": []
     }

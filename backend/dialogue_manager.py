@@ -1,4 +1,4 @@
-﻿"""
+"""
 SwasthyaSync v4 — Dialogue Manager (Dynamic Schema-Driven)
 
 Orchestrates the Two-Stage LLM Pipeline:
@@ -48,12 +48,24 @@ class DialogueManager:
         self.record.macro_state = "CHIEF_COMPLAINT"
         return self._build_ui_instruction()
 
-    def set_demographics(self, name: str, age: int | None, sex: str):
+    def set_demographics(self, name: str, age: int | None, sex: str, weight: float | None = None, height: str | None = None, vitals: str | None = None):
         """Set patient demographics (called from frontend before interview)."""
         self.record.patient_name = name
         self.record.patient_age = age
         self.record.patient_sex = sex
-        logger.info(f"Demographics set: name={name}, age={age}, sex={sex}")
+        if weight:
+            self.record.update_filled_state("weight", weight, confidence=1.0)
+        if height:
+            self.record.update_filled_state("height", height, confidence=1.0)
+        if vitals:
+            self.record.update_filled_state("vitals", vitals, confidence=1.0)
+        logger.info(f"Demographics set: name={name}, age={age}, sex={sex}, weight={weight}, height={height}, vitals={vitals}")
+
+    def set_previous_history(self, history: dict | None):
+        """Inject previous encounter history for follow-up context."""
+        if history:
+            self.record.previous_history = history
+            logger.info("Previous history injected for follow-up.")
 
     def process_patient_input(self, input_type: str, value: str) -> dict:
         """
@@ -66,6 +78,8 @@ class DialogueManager:
         # ── Navigation actions ──
         if input_type == "back":
             self.fsm.go_back()
+            if self.fsm.state == "SCHEMA_GENERATION":
+                self.fsm.go_back()
             self.record.macro_state = self.fsm.state
             return self._build_ui_instruction()
 
@@ -102,6 +116,29 @@ class DialogueManager:
 
         # ── DOCUMENT_SCAN / SUMMARY_CONFIRMATION: advance on next ──
         if state in ("DOCUMENT_SCAN", "SUMMARY_CONFIRMATION"):
+            # 1. The Database Checkpoint: Save before advancing
+            if state == "DOCUMENT_SCAN":
+                try:
+                    import database
+                    # Serialize the volatile RAM data
+                    record_payload = {
+                        "filled_state": self.record.filled_state,
+                        "document_extractions": [e.model_dump() for e in self.record.document_extractions],
+                        "red_flags": [r.model_dump() for r in self.record.red_flags]
+                    }
+                    has_red_flags = len(self.record.red_flags) > 0
+                    database.commit_fsm_checkpoint(
+                        session_id=self.record.session_id,
+                        filled_state=record_payload,
+                        chief_complaint=str(self.record.chief_complaint.value or ""),
+                        interview_qa=self.record.conversation_history,
+                        priority_flag=has_red_flags,
+                        status="IN_PROGRESS"
+                    )
+                except Exception as e:
+                    logger.error(f"🚨 CRITICAL FAULT: Failed to persist session {self.record.session_id} - {e}")
+
+            # 2. Advance the FSM safely
             self.fsm.advance()
             self.record.macro_state = self.fsm.state
             return self._build_ui_instruction()
@@ -215,6 +252,21 @@ class DialogueManager:
         self.fsm.set_state("DYNAMIC_INTERVIEW")
         self.record.macro_state = "DYNAMIC_INTERVIEW"
 
+        # Checkpoint the chief complaint immediately to the database
+        try:
+            import database
+            has_red_flags = len(self.record.red_flags) > 0
+            database.commit_fsm_checkpoint(
+                session_id=self.record.session_id,
+                filled_state={"filled_state": self.record.filled_state},
+                chief_complaint=str(self.record.chief_complaint.value or ""),
+                interview_qa=self.record.conversation_history,
+                priority_flag=has_red_flags,
+                status="IN_PROGRESS"
+            )
+        except Exception as e:
+            logger.error(f"🚨 Checkpoint failed for session {self.record.session_id} - {e}")
+
         return self._build_ui_instruction()
 
     # ──────────────────────────────────────────────────────────────────
@@ -277,6 +329,19 @@ class DialogueManager:
             logger.info(f"Interview complete at turn {self.record.interview_turn_count}")
             self.fsm.advance()  # → DOCUMENT_SCAN
             self.record.macro_state = self.fsm.state
+            try:
+                import database
+                has_red_flags = len(self.record.red_flags) > 0
+                database.commit_fsm_checkpoint(
+                    session_id=self.record.session_id,
+                    filled_state={"filled_state": self.record.filled_state},
+                    chief_complaint=str(self.record.chief_complaint.value or ""),
+                    interview_qa=self.record.conversation_history,
+                    priority_flag=has_red_flags,
+                    status="IN_PROGRESS"
+                )
+            except Exception as e:
+                pass
             return self._build_ui_instruction()
 
         # 6. SELECT NEXT FIELD
@@ -285,6 +350,19 @@ class DialogueManager:
             # All fields filled — advance
             self.fsm.advance()
             self.record.macro_state = self.fsm.state
+            try:
+                import database
+                has_red_flags = len(self.record.red_flags) > 0
+                database.commit_fsm_checkpoint(
+                    session_id=self.record.session_id,
+                    filled_state={"filled_state": self.record.filled_state},
+                    chief_complaint=str(self.record.chief_complaint.value or ""),
+                    interview_qa=self.record.conversation_history,
+                    priority_flag=has_red_flags,
+                    status="IN_PROGRESS"
+                )
+            except Exception as e:
+                pass
             return self._build_ui_instruction()
 
         # 7. GENERATE QUESTION for the selected field
@@ -297,12 +375,27 @@ class DialogueManager:
             chief_complaint=str(self.record.chief_complaint.value or ""),
             patient_age=self.record.patient_age,
             patient_sex=self.record.patient_sex,
+            previous_history=self.record.previous_history,
         )
 
         # Store assistant's question
         self.record.add_conversation_message(
             "assistant", result.spoken_text, next_field.get("category", "HPI")
         )
+
+        try:
+            import database
+            has_red_flags = len(self.record.red_flags) > 0
+            database.commit_fsm_checkpoint(
+                session_id=self.record.session_id,
+                filled_state={"filled_state": self.record.filled_state},
+                chief_complaint=str(self.record.chief_complaint.value or ""),
+                interview_qa=self.record.conversation_history,
+                priority_flag=has_red_flags,
+                status="IN_PROGRESS"
+            )
+        except Exception as e:
+            logger.error(f"🚨 Checkpoint failed for session {self.record.session_id} - {e}")
 
         # 8. Build UI response
         return self._build_dynamic_ui(result, next_field)
@@ -389,6 +482,7 @@ class DialogueManager:
                 patient_name=self.record.patient_name,
                 patient_age=self.record.patient_age,
                 patient_sex=self.record.patient_sex,
+                previous_history=self.record.previous_history,
             )
             self.record.add_conversation_message(
                 "assistant", result.spoken_text, "CHIEF_COMPLAINT"
@@ -440,6 +534,7 @@ class DialogueManager:
                 chief_complaint=str(self.record.chief_complaint.value or ""),
                 patient_age=self.record.patient_age,
                 patient_sex=self.record.patient_sex,
+                previous_history=self.record.previous_history,
             )
             self.record.add_conversation_message(
                 "assistant", result.spoken_text, next_f.get("category", "HPI")

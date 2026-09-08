@@ -1,4 +1,4 @@
-﻿"""
+"""
 SwasthyaSync v4 — Unified Patient Record Schema
 
 Evolved for the dynamic schema-driven architecture:
@@ -128,6 +128,9 @@ class PatientRecord(BaseModel):
 
     # ── Safety ──
     red_flags: list[RedFlagEntry] = Field(default_factory=list)
+
+    # ── Longitudinal context (follow-up visits) ──
+    previous_history: Optional[dict] = None  # Populated for returning patients
 
     # ── Notes ──
     clinician_notes: list[str] = Field(default_factory=list)

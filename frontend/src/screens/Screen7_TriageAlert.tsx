@@ -1,3 +1,4 @@
+import { LiquidButton } from '../components/ui/button';
 import { useEffect } from 'react';
 import { ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -48,12 +49,12 @@ export function Screen7_TriageAlert({ onAcknowledge }: Props) {
         A nurse has been alerted and will see you immediately.
       </p>
 
-      <button
+      <LiquidButton
         onClick={onAcknowledge}
         className="relative z-10 group overflow-hidden bg-red-600 text-white px-12 py-5 rounded-full font-bold shadow-xl shadow-red-600/30 hover:bg-red-700 transition-all active:scale-95 text-lg flex items-center gap-3"
       >
         <span className="relative z-10">I Understand</span>
-      </button>
+      </LiquidButton>
     </motion.div>
   );
 }

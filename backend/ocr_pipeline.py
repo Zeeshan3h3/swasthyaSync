@@ -107,6 +107,8 @@ async def process_document(image_bytes: bytes, filename: str = "document.jpg", m
 
     for model_name in models_to_try:
         try:
+            import time
+            start_time = time.time()
             logger.info(f"Attempting OCR vision extraction with model: {model_name}")
             response = await client.aio.models.generate_content(
                 model=model_name,
@@ -124,7 +126,8 @@ async def process_document(image_bytes: bytes, filename: str = "document.jpg", m
             doc = response.parsed
             if doc:
                 doc.filename = filename
-                logger.info(f"OCR vision extraction succeeded with model {model_name}")
+                elapsed = time.time() - start_time
+                logger.info(f"OCR vision extraction succeeded with model {model_name} in {elapsed:.2f} seconds")
                 return doc.model_dump()
         except Exception as e:
             last_error = str(e)

@@ -1,7 +1,10 @@
+import { LiquidButton } from '../components/ui/button';
 import { CheckCircle2, Activity, FileText, Send, UserCircle, Pill, TestTube, AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslations } from '../translations';
+import { getApiBaseUrl } from '../config';
+import { useNavigate } from 'react-router-dom';
 
 interface Props {
   language: string;
@@ -10,10 +13,25 @@ interface Props {
   sessionId?: string;
 }
 
-export function Screen8_Complete({ language, onReset, patientRecord }: Props) {
+export function Screen8_Complete({ language, onReset, patientRecord, sessionId }: Props) {
   const { t } = useTranslations(language);
+  const navigate = useNavigate();
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
+  const [tokenInfo, setTokenInfo] = useState<{ token: string; doctor_name: string; room_number: string } | null>(null);
+
+  useEffect(() => {
+    if (sessionId) {
+      fetch(`${getApiBaseUrl()}/api/queue/token/${sessionId}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.token) {
+            setTokenInfo(data);
+          }
+        })
+        .catch(console.error);
+    }
+  }, [sessionId]);
   
   const rawName = patientRecord?.patient_name;
   const patientName = typeof rawName === 'string' ? rawName : '';
@@ -39,20 +57,18 @@ export function Screen8_Complete({ language, onReset, patientRecord }: Props) {
   };
 
   if (isSent) {
-    // Generate mock token info
-    const tokenNumber = Math.floor(100 + Math.random() * 900);
-    const roomNumber = Math.floor(1 + Math.random() * 10);
-    const doctors = ["Dr. Sharma", "Dr. Gupta", "Dr. Reddy", "Dr. Patel"];
-    const assignedDoctor = doctors[Math.floor(Math.random() * doctors.length)];
+    const tokenNumber = tokenInfo?.token || "---";
+    const roomNumber = tokenInfo?.room_number || "---";
+    const assignedDoctor = tokenInfo?.doctor_name ? `Dr. ${tokenInfo.doctor_name}` : "Assigned Doctor";
     
     return (
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: -20 }}
-        className="flex flex-col flex-1 items-center justify-center p-6 sm:p-12 bg-slate-50 w-full h-full"
+        className="flex flex-col items-center justify-start p-6 sm:p-12 bg-slate-50 w-full h-full overflow-y-auto"
       >
-        <div className="bg-white/90 backdrop-blur-2xl p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-white w-full max-w-2xl text-center relative overflow-hidden">
+        <div className="bg-white/90 backdrop-blur-2xl p-8 sm:p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-white w-full max-w-2xl text-center relative overflow-hidden my-auto shrink-0">
           <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-emerald-400 to-teal-500" />
           
           <motion.div 
@@ -70,7 +86,7 @@ export function Screen8_Complete({ language, onReset, patientRecord }: Props) {
           <div className="bg-slate-50/50 rounded-3xl p-8 mb-10 border border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-6 shadow-inner">
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('token_number')}</p>
-              <p className="text-4xl font-extrabold text-blue-600">#{tokenNumber}</p>
+              <p className="text-4xl font-extrabold text-blue-600">{tokenNumber}</p>
             </div>
             <div className="sm:border-l sm:border-slate-200">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('room_number')}</p>
@@ -82,12 +98,25 @@ export function Screen8_Complete({ language, onReset, patientRecord }: Props) {
             </div>
           </div>
           
-          <button
-            onClick={() => onReset ? onReset() : window.location.reload()}
-            className="w-full bg-slate-900 text-white px-8 py-5 rounded-full font-extrabold hover:bg-slate-800 transition-all text-xl shadow-xl shadow-slate-900/20 active:scale-95"
+          {sessionId && (
+            <LiquidButton
+              onClick={() => window.open(`${getApiBaseUrl()}/api/summary/${sessionId}/pdf`, '_blank')}
+              className="w-full bg-emerald-600 text-white px-8 py-5 rounded-full font-extrabold hover:bg-emerald-700 transition-all text-xl shadow-xl shadow-emerald-600/20 active:scale-95 mb-4 flex items-center justify-center gap-3"
+            >
+              <FileText className="w-6 h-6" />
+              Download OP Casesheet (PDF)
+            </LiquidButton>
+          )}
+
+          <LiquidButton
+            onClick={() => {
+              if (onReset) onReset();
+              navigate('/kiosk/login');
+            }}
+            className="w-full bg-slate-900 text-white px-8 py-5 rounded-full font-extrabold hover:bg-slate-800 transition-all text-xl shadow-xl shadow-slate-900/20 active:scale-95 mt-4"
           >
             {t('start_new_patient')}
-          </button>
+          </LiquidButton>
         </div>
       </motion.div>
     );
@@ -193,7 +222,7 @@ export function Screen8_Complete({ language, onReset, patientRecord }: Props) {
                const meds = entity.medications || [];
                const labs = entity.lab_values || [];
                const diags = entity.diagnoses || [];
-               const imageUrl = doc.ocr_path && doc.ocr_path.startsWith('http') ? doc.ocr_path : null;
+               const imageUrl = doc.ocr_path ? (doc.ocr_path.startsWith('http') ? doc.ocr_path : `${getApiBaseUrl()}${doc.ocr_path}`) : null;
                
                return (
                  <div key={i} className="mb-4 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden flex flex-col md:flex-row">
@@ -251,7 +280,7 @@ export function Screen8_Complete({ language, onReset, patientRecord }: Props) {
       </motion.div>
 
       {/* Action Button */}
-      <button
+      <LiquidButton
         onClick={handleSendToDoctor}
         disabled={isSending}
         className="w-full max-w-4xl bg-blue-600 text-white px-8 py-6 rounded-full font-extrabold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/30 text-xl flex items-center justify-center gap-4 disabled:bg-slate-300 disabled:shadow-none mb-10 shrink-0 active:scale-95 cursor-pointer"
@@ -262,7 +291,7 @@ export function Screen8_Complete({ language, onReset, patientRecord }: Props) {
           <Send className="w-7 h-7" />
         )}
         {isSending ? t('transmitting') : t('send_to_doctor')}
-      </button>
+      </LiquidButton>
     </motion.div>
   );
 }

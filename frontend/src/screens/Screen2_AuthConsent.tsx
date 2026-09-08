@@ -1,3 +1,4 @@
+import { LiquidButton } from '../components/ui/button';
 import { ShieldCheck, Info, User, Calendar, UserCircle, ArrowLeft, ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import { motion } from 'framer-motion';
@@ -86,7 +87,7 @@ export function Screen2_AuthConsent({ onNext, onBack, language = 'en-IN' }: Prop
             </label>
             <div className="grid grid-cols-3 gap-2 sm:gap-3">
               {['Male', 'Female', 'Other'].map((s) => (
-                <button
+                <LiquidButton
                   key={s}
                   onClick={() => setSex(s.toLowerCase())}
                   className={`py-3 sm:py-3.5 rounded-xl sm:rounded-2xl text-xs sm:text-base font-bold transition-all duration-200 border-2 cursor-pointer ${
@@ -96,7 +97,7 @@ export function Screen2_AuthConsent({ onNext, onBack, language = 'en-IN' }: Prop
                   }`}
                 >
                   {t(s.toLowerCase())}
-                </button>
+                </LiquidButton>
               ))}
             </div>
           </div>
@@ -141,14 +142,14 @@ export function Screen2_AuthConsent({ onNext, onBack, language = 'en-IN' }: Prop
 
       {/* Sticky Bottom Buttons for Mobile Accessibility */}
       <div className="sticky sm:relative bottom-0 left-0 right-0 bg-white/95 backdrop-blur-md pt-3 pb-3 sm:pt-6 w-full max-w-2xl flex gap-3 z-30 shadow-lg sm:shadow-none border-t sm:border-t-0 border-slate-100 px-2 sm:px-0 mt-6">
-        <button
+        <LiquidButton
           onClick={onBack}
           className="group flex items-center justify-center gap-1.5 sm:gap-2 px-4 sm:px-8 py-3.5 sm:py-5 rounded-full font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all w-1/3 text-sm sm:text-lg cursor-pointer"
         >
           <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" />
           {t('back')}
-        </button>
-        <button
+        </LiquidButton>
+        <LiquidButton
           onClick={handleSubmit}
           disabled={!canProceed}
           className={`group relative flex-1 overflow-hidden flex items-center justify-center gap-2 sm:gap-3 rounded-full py-3.5 sm:py-5 font-bold shadow-lg sm:shadow-xl transition-all transform active:scale-95 text-sm sm:text-lg cursor-pointer ${
@@ -162,7 +163,7 @@ export function Screen2_AuthConsent({ onNext, onBack, language = 'en-IN' }: Prop
             {t('agree_continue')}
             <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform" />
           </span>
-        </button>
+        </LiquidButton>
       </div>
     </motion.div>
   );

@@ -2,12 +2,12 @@
 SwasthyaSync — Document-Sourced Red Flag Checker
 
 Runs at the Screen 6 confirmation step alongside the contradiction checker.
-Scans OCR-extracted lab values for clinically critical abnormalities and
+Scans OCR-extracted elab values for clinically critical abnormalities and
 produces the SAME RedFlagEntry shape that safety_watchdog.py / red_flag_library.py
 already produce.  Additive — the union of these flags and conversational flags
 is what gets stored on PatientRecord.red_flags.
 
-When a document red flag fires, the same escalate_queue_priority() function
+When a document red flag fires, th same escalate_queue_priority() function
 is called — the patient is still in the queue at that point even though the
 interview is done.
 """

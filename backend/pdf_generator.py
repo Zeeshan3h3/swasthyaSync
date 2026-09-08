@@ -1,283 +1,126 @@
-import datetime
-from jinja2 import Template
-from jinja2 import Template
-from patient_record import RedFlagEntry
+import os
+import io
+import queue
+import threading
+import logging
+import asyncio
+from jinja2 import Environment, FileSystemLoader
+from playwright.sync_api import sync_playwright
+from PIL import Image
 
-_TEMPLATE_STR = """
-<!DOCTYPE html>
-<html>
-<head>
-<style>
-    body { font-family: sans-serif; margin: 0; padding: 20px; color: #333; }
-    {% if priority_flag %}
-    .header-banner { background-color: #dc2626; color: white; padding: 15px; font-weight: bold; text-align: center; font-size: 18px; margin-bottom: 20px;}
-    {% else %}
-    .header-banner { display: none; }
-    {% endif %}
-    h1 { margin-top: 0; }
-    .header-info { margin-bottom: 20px; border-bottom: 2px solid #ccc; padding-bottom: 10px; }
-    .header-info p { margin: 4px 0; }
-    h2 { font-size: 16px; border-bottom: 1px solid #ccc; padding-bottom: 5px; margin-top: 25px; }
-    .vitals p { margin: 8px 0; font-family: monospace; font-size: 14px; }
-    .qa-box { margin-bottom: 10px; }
-    .qa-box strong { display: block; }
-    .documents { background: #f8fafc; padding: 15px; border-radius: 5px; margin-top: 15px; }
-    .abnormal { color: #dc2626; font-weight: bold; }
-    .consultation-box { border: 2px solid #94a3b8; height: 300px; margin-top: 15px; border-radius: 5px; }
-    .footer { font-size: 10px; color: #64748b; margin-top: 30px; text-align: center; border-top: 1px solid #e2e8f0; padding-top: 10px; }
-</style>
-</head>
-<body>
-    {% if priority_flag %}
-    <div class="header-banner">
-        PRIORITY ALERT: {{ priority_reason }}
-    </div>
-    {% endif %}
+# Setup Jinja2 environment
+template_dir = os.path.join(os.path.dirname(__file__), "templates")
+os.makedirs(template_dir, exist_ok=True)
+env = Environment(loader=FileSystemLoader(template_dir))
+logger = logging.getLogger(__name__)
 
-    <h1>Pre-Consultation Summary</h1>
-    <div class="header-info">
-        <p><strong>Name:</strong> {{ name }}</p>
-        <p><strong>Age:</strong> {{ age }}</p>
-        <p><strong>Sex:</strong> {{ sex }}</p>
-        <p><strong>Phone:</strong> {{ phone }}</p>
-        <p><strong>Token:</strong> {{ token }}</p>
-        <p><strong>Visit Type:</strong> {{ visit_type }}</p>
-        <p><strong>Generated:</strong> {{ generated_timestamp }}</p>
-    </div>
+class PDFEngine:
+    def __init__(self):
+        self.playwright = None
+        self.browser = None
+        self.req_queue = queue.Queue()
+        self.thread = threading.Thread(target=self._run, daemon=True)
+        self.started = False
 
-    <h2>Vitals</h2>
-    <div class="vitals">
-        <p>BP: ______ &nbsp;&nbsp; HR: ______ bpm &nbsp;&nbsp; Temp: ______ °F &nbsp;&nbsp; SpO2: ______%</p>
-        <p>Height: ______ cm &nbsp;&nbsp; Weight: ______ kg &nbsp;&nbsp; BMI: ______</p>
-    </div>
+    def _run(self):
+        try:
+            with sync_playwright() as p:
+                self.playwright = p
+                self.browser = p.chromium.launch(
+                    args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+                )
+                logger.info("Playwright browser started in dedicated thread.")
+                while True:
+                    task = self.req_queue.get()
+                    if task is None:
+                        break
+                    html_content, res_queue = task
+                    try:
+                        page = self.browser.new_page()
+                        page.set_content(html_content, wait_until="networkidle")
+                        pdf_bytes = page.pdf(
+                            format="A4",
+                            print_background=True,
+                            margin={"top": "1cm", "right": "1cm", "bottom": "1cm", "left": "1cm"}
+                        )
+                        page.close()
+                        res_queue.put(("ok", pdf_bytes))
+                    except Exception as e:
+                        logger.error(f"Playwright page error: {e}")
+                        res_queue.put(("error", e))
+        except Exception as e:
+            logger.error(f"Playwright thread failed: {e}")
 
-    <h2>Interview Summary</h2>
-    <p><strong>Chief Complaint:</strong> {{ chief_complaint }}</p>
-    {% for field in filled_state %}
-    <div class="qa-box">
-        <strong>{{ field.question }}</strong>
-        <span>{{ field.answer }}</span>
-    </div>
-    {% endfor %}
+    async def start(self):
+        if not self.started:
+            self.thread.start()
+            self.started = True
 
-    {% if has_documents %}
-    <div class="documents">
-        <h2>Documents Summary</h2>
-        
-        {% if medications %}
-        <p><strong>Medications:</strong></p>
-        <ul>
-            {% for m in medications %}<li>{{ m }}</li>{% endfor %}
-        </ul>
-        {% endif %}
+    async def stop(self):
+        if self.started:
+            self.req_queue.put(None)
+            self.started = False
 
-        {% if diagnoses %}
-        <p><strong>Diagnoses:</strong></p>
-        <ul>
-            {% for d in diagnoses %}<li>{{ d }}</li>{% endfor %}
-        </ul>
-        {% endif %}
-
-        {% if lab_values %}
-        <p><strong>Lab Values:</strong></p>
-        <ul>
-            {% for lab in lab_values %}
-            <li>
-                {{ lab.test_name }}: 
-                <span class="{% if lab.is_abnormal %}abnormal{% endif %}">{{ lab.value }} {{ lab.unit }}</span>
-            </li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-
-        {% if contradictions %}
-        <p><strong>Contradictions (Unresolved):</strong></p>
-        <ul>
-            {% for c in contradictions %}
-            <li class="abnormal">{{ c.field }}: Conversational value "{{ c.conversation_value }}" vs Document value "{{ c.document_value }}"</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-        {% if unverifiable_values %}
-        <p><strong>Unverifiable/Unrecognized Lab Units (Requires Review):</strong></p>
-        <ul>
-            {% for u in unverifiable_values %}
-            <li class="abnormal">{{ u }}</li>
-            {% endfor %}
-        </ul>
-        {% endif %}
-    </div>
-    {% endif %}
-
-    <h2>Consultation Summary</h2>
-    <div class="consultation-box"></div>
-
-    <div class="footer">
-        Token: {{ token }} | Generated: {{ generated_timestamp }}
-    </div>
-</body>
-</html>
-"""
-
-def generate_summary_pdf(unified_record: dict) -> bytes:
-    """
-    Render PDF using FPDF primitives.
-    """
-    # Prepare data
-    filled_state_list = []
-    for k, v in unified_record.get("filled_state", {}).items():
-        if isinstance(v, dict) and v.get("value"):
-            filled_state_list.append({
-                "question": k.replace("_", " ").title(),
-                "answer": v.get("value")
-            })
+    def generate_pdf_sync(self, html_content: str) -> bytes:
+        if not self.started:
+            # Fallback for scripts directly calling generate_summary_pdf
+            self.thread.start()
+            self.started = True
             
-    doc_extractions = unified_record.get("document_extractions", [])
-    has_documents = len(doc_extractions) > 0
-    
-    medications = []
-    diagnoses = []
-    lab_values = []
-    
-    for ext in doc_extractions:
-        for ent in ext.get("entities", []):
-            for med in ent.get("medications", []):
-                medications.append(med.get("name") or med.get("drug_name") or "Unknown")
-            for dx in ent.get("diagnoses", []):
-                diagnoses.append(dx.get("name") or dx.get("condition_name") or "Unknown")
-            for lab in ent.get("lab_values", []):
-                lab_values.append(lab)
+        res_queue = queue.Queue()
+        self.req_queue.put((html_content, res_queue))
+        status, result = res_queue.get()
+        if status == "error":
+            raise result
+        return result
 
+pdf_engine = PDFEngine()
+
+def _compress_image_to_base64(image_path: str) -> str:
+    import base64
+    if not os.path.exists(image_path):
+        return ""
     try:
-        from fpdf import FPDF
-        pdf = FPDF()
-        pdf.add_page()
-        
-        # Helper variables
-        priority_flag = unified_record.get("priority_flag", False)
-        priority_reason = unified_record.get("priority_reason", "")
-        name = unified_record.get("patient_name") or "Unknown"
-        age = str(unified_record.get("patient_age") or "Unknown")
-        sex = unified_record.get("patient_sex") or "Unknown"
-        phone = unified_record.get("phone") or "Unknown"
-        token = unified_record.get("token_id") or "Unknown"
-        visit_type = unified_record.get("clinic_mode") or "Unknown"
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        chief_complaint = unified_record.get("chief_complaint") or "None"
-        
-        # Title/Header
-        if priority_flag:
-            pdf.set_font("Helvetica", "B", 14)
-            pdf.set_text_color(220, 38, 38)
-            pdf.cell(0, 10, f"PRIORITY ALERT: {priority_reason}", ln=True, align="C")
-            pdf.set_text_color(0, 0, 0)
+        with Image.open(image_path) as img:
+            # Convert to RGB if necessary (e.g., if RGBA)
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
             
-        pdf.set_font("Helvetica", "B", 16)
-        pdf.cell(0, 10, "Pre-Consultation Summary", ln=True)
-        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-        pdf.ln(5)
-        
-        # Demographics
-        pdf.set_font("Helvetica", "", 11)
-        pdf.cell(0, 6, f"Name: {name}    Age: {age}    Sex: {sex}", ln=True)
-        pdf.cell(0, 6, f"Phone: {phone}    Token: {token}    Visit Type: {visit_type}", ln=True)
-        pdf.cell(0, 6, f"Generated: {timestamp}", ln=True)
-        pdf.line(10, pdf.get_y()+2, 200, pdf.get_y()+2)
-        pdf.ln(8)
-        
-        # Vitals
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, "Vitals", ln=True)
-        pdf.set_font("Courier", "", 10)
-        pdf.cell(0, 6, "BP: ______   HR: ______ bpm   Temp: ______ F   SpO2: ______%", ln=True)
-        pdf.cell(0, 6, "Height: ______ cm   Weight: ______ kg   BMI: ______", ln=True)
-        pdf.ln(5)
-        
-        # Interview Summary
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, "Interview Summary", ln=True)
-        pdf.set_font("Helvetica", "B", 10)
-        pdf.cell(35, 6, "Chief Complaint:")
-        pdf.set_font("Helvetica", "", 10)
-        
-        # safely extract chief complaint which might be a dict
-        cc_val = "None"
-        if isinstance(chief_complaint, dict):
-            cc_val = str(chief_complaint.get("value", ""))
-        elif chief_complaint:
-            cc_val = str(chief_complaint)
+            # Resize preserving aspect ratio
+            img.thumbnail((1200, 1600), Image.Resampling.LANCZOS)
             
-        pdf.multi_cell(190, 6, cc_val)
-        
-        for field in filled_state_list:
-            pdf.set_font("Helvetica", "B", 10)
-            pdf.multi_cell(190, 6, str(field["question"]))
-            pdf.set_font("Helvetica", "", 10)
-            pdf.multi_cell(190, 6, str(field["answer"]))
-            pdf.ln(2)
-            
-        # Documents
-        if has_documents:
-            pdf.ln(5)
-            pdf.set_font("Helvetica", "B", 12)
-            pdf.cell(0, 8, "Documents Summary", ln=True)
-            
-            if medications:
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(0, 6, "Medications:", ln=True)
-                pdf.set_font("Helvetica", "", 10)
-                for m in medications:
-                    pdf.cell(0, 6, f"- {m}", ln=True)
-                    
-            if diagnoses:
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(0, 6, "Diagnoses:", ln=True)
-                pdf.set_font("Helvetica", "", 10)
-                for d in diagnoses:
-                    pdf.cell(0, 6, f"- {d}", ln=True)
-                    
-            if lab_values:
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(0, 6, "Lab Values:", ln=True)
-                for lab in lab_values:
-                    is_abnormal = lab.get("is_abnormal")
-                    if is_abnormal:
-                        pdf.set_text_color(220, 38, 38)
-                        pdf.set_font("Helvetica", "B", 10)
-                    else:
-                        pdf.set_text_color(0, 0, 0)
-                        pdf.set_font("Helvetica", "", 10)
-                    test_name = lab.get("test_name", "")
-                    val = lab.get("value", "")
-                    unit = lab.get("unit", "")
-                    pdf.cell(0, 6, f"- {test_name}: {val} {unit}", ln=True)
-                pdf.set_text_color(0, 0, 0)
-                
-            contradictions = unified_record.get("contradictions", [])
-            if contradictions:
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(0, 6, "Contradictions (Unresolved):", ln=True)
-                pdf.set_text_color(220, 38, 38)
-                for c in contradictions:
-                    pdf.multi_cell(190, 6, f"- {c.get('field')}: Conversational value '{c.get('conversation_value')}' vs Document value '{c.get('document_value')}'")
-                pdf.set_text_color(0, 0, 0)
-                
-            unverifiable = unified_record.get("unverifiable_values", [])
-            if unverifiable:
-                pdf.set_font("Helvetica", "B", 10)
-                pdf.cell(0, 6, "Unverifiable/Unrecognized Lab Units:", ln=True)
-                pdf.set_text_color(220, 38, 38)
-                for u in unverifiable:
-                    pdf.cell(0, 6, f"- {u}", ln=True)
-                pdf.set_text_color(0, 0, 0)
-
-        pdf.ln(10)
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, "Consultation Summary", ln=True)
-        pdf.rect(10, pdf.get_y(), 190, 80)
-        
-        return bytes(pdf.output())
+            # Save to BytesIO as JPEG
+            buffered = io.BytesIO()
+            img.save(buffered, format="JPEG", quality=80)
+            img_b64 = base64.b64encode(buffered.getvalue()).decode("utf-8")
+            return f"data:image/jpeg;base64,{img_b64}"
     except Exception as e:
         import logging
-        logging.getLogger(__name__).error(f"Failed to generate PDF: {e}", exc_info=True)
-        return b""
+        logging.getLogger(__name__).error(f"Error compressing image {image_path}: {e}")
+        return ""
+
+async def generate_summary_pdf(session_id: str, context: dict) -> str:
+    """
+    context dict contains: patient, ai_summary, red_flag_active, priority_reason,
+    filled_state, ocr_data, logo_b64, uploaded_images
+    """
+    template = env.get_template("medical_summary.html")
+    
+    # Process images if needed
+    if "uploaded_images" in context:
+        compressed_images = []
+        for img_path in context["uploaded_images"]:
+             b64 = _compress_image_to_base64(img_path)
+             if b64:
+                 compressed_images.append(b64)
+        context["uploaded_images"] = compressed_images
+
+    html_content = template.render(**context)
+    
+    # Run the synchronous playwright generation in a background thread executor
+    # so we don't block the FastAPI event loop
+    loop = asyncio.get_event_loop()
+    pdf_bytes = await loop.run_in_executor(None, pdf_engine.generate_pdf_sync, html_content)
+    
+    return pdf_bytes
+

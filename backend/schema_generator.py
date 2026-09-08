@@ -26,8 +26,8 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────────────────────────────────
 # Stage 1 Model — heavier model called once per encounter
 # ──────────────────────────────────────────────────────────────────────
-SCHEMA_MODEL_PRIMARY = "gemini-3.6-flash"
-SCHEMA_MODEL_FALLBACK = "gemini-3.5-flash-lite"
+SCHEMA_MODEL_PRIMARY = "gemini-3.5-flash-lite"
+SCHEMA_MODEL_FALLBACK = "gemini-3.6-flash"
 
 # Language names for demographic context
 LANGUAGE_NAMES = {
@@ -163,6 +163,7 @@ def _call_model_for_schema(model: str, system_prompt: str, user_prompt: str) -> 
                 system_instruction=system_prompt,
                 response_mime_type="application/json",
                 temperature=0.3,
+                max_output_tokens=2048,
                 automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )

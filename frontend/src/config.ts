@@ -14,7 +14,12 @@ export function getApiBaseUrl(): string {
   if (typeof window !== 'undefined') {
     const protocol = window.location.protocol;
     const hostname = window.location.hostname || 'localhost';
-    return `${protocol}//${hostname}:8000`;
+    const port = window.location.port ? `:${window.location.port}` : '';
+    // If it's localhost, we default to 8000 for local dev if port is missing/5173
+    if (hostname === 'localhost' && (!port || port === ':5173')) {
+      return `${protocol}//localhost:8000`;
+    }
+    return `${protocol}//${hostname}${port}`;
   }
   return 'http://localhost:8000';
 }
@@ -27,7 +32,12 @@ export function getWsUrl(): string {
   if (typeof window !== 'undefined') {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
     const hostname = window.location.hostname || 'localhost';
-    return `${protocol}//${hostname}:8000/ws/session`;
+    const port = window.location.port ? `:${window.location.port}` : '';
+    // If it's localhost, default to 8000 for local dev if port is 5173
+    if (hostname === 'localhost' && (!port || port === ':5173')) {
+      return `${protocol}//localhost:8000/ws/session`;
+    }
+    return `${protocol}//${hostname}${port}/ws/session`;
   }
   return 'ws://localhost:8000/ws/session';
 }
