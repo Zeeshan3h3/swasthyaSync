@@ -1,5 +1,5 @@
 import { LiquidButton } from '../components/ui/button';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Phone, Users, UserPlus, Building2, ArrowRight, User, Calendar, Activity, MapPin, Globe } from 'lucide-react';
 import { getApiBaseUrl } from '../config';
@@ -106,7 +106,11 @@ export function Login({ onSessionStarted }: Props) {
     }
   };
 
+  const isStartingRef = useRef(false);
+
   const handleStartSession = async () => {
+    if (isStartingRef.current) return;
+    isStartingRef.current = true;
     setIsLoading(true);
     try {
       let finalRegData = { ...regData };
@@ -142,9 +146,10 @@ export function Login({ onSessionStarted }: Props) {
       }
     } catch (e) {
       console.error(e);
-      alert("Network error");
+      alert("Network error starting session");
     } finally {
       setIsLoading(false);
+      isStartingRef.current = false;
     }
   };
 

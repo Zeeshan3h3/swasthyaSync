@@ -1,4 +1,12 @@
-"""
+import os
+import uuid
+from typing import List, Optional, Any
+
+# Assuming ocr_pipeline.py is quite long, I'll use a python script to rewrite it cleanly
+# because the prompt alone is huge.
+
+with open("c:/SmartIndiaHackathon/Prototype/backend/ocr_pipeline.py", "w", encoding="utf-8") as f:
+    f.write('''"""
 SwasthyaSync — OCR & NER Pipeline (Clinical Vision AI Engine)
 Integrates Gemini Multimodal models for batch document digitization and validation.
 """
@@ -1365,3 +1373,4 @@ async def process_batch_ocr(image_bytes_list: List[bytes], media_types: List[str
 # For backward compatibility with tests/fallback, keep process_document
 async def process_document(image_bytes: bytes, filename: str = "doc.jpg", media_type: str = "image/jpeg") -> dict:
     return await process_batch_ocr([image_bytes], [media_type], "Unknown Patient")
+''')

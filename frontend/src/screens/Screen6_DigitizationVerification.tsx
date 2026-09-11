@@ -19,8 +19,9 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
   const [isConfirming, setIsConfirming] = useState(false);
   const BACKEND_URL = getApiBaseUrl();
 
-  // Extract data from patientRecord
-  const docExt = patientRecord?.document_extractions?.[0];
+  // Extract data from patientRecord (use the most recent extraction)
+  const extractions = patientRecord?.document_extractions || [];
+  const docExt = extractions.length > 0 ? extractions[extractions.length - 1] : null;
   const firstEntity = docExt?.entities?.[0] || {};
   const entities = firstEntity;
   const summary = docExt ? `Document type: ${docExt.doc_type}` : "Clinical document processed.";
@@ -49,15 +50,33 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
       exit={{ opacity: 0, y: -20 }}
       className="flex flex-col flex-1 p-6 sm:p-10 lg:p-12 h-full max-w-5xl mx-auto w-full"
     >
-      <div className="flex items-center gap-4 mb-8">
-        <div className="bg-emerald-100 p-3 rounded-2xl">
-          <FileCheck className="w-8 h-8 text-emerald-600" />
+      {extractions.length === 0 ? (
+        <div className="flex flex-col items-center justify-center flex-1 text-center">
+          <div className="bg-slate-100 p-6 rounded-full mb-6">
+            <FileCheck className="w-16 h-16 text-slate-400" />
+          </div>
+          <h2 className="text-3xl font-extrabold text-slate-900 mb-4">{t('no_documents_uploaded')}</h2>
+          <p className="text-slate-500 text-lg mb-8 max-w-md">
+            {t('no_docs_desc')}
+          </p>
+          <LiquidButton
+            onClick={onNext}
+            className="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-4 rounded-full font-bold shadow-xl transition-all active:scale-95 text-lg"
+          >
+            {t('continue')}
+          </LiquidButton>
         </div>
-        <div>
-          <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">{t('scan_complete')}</h2>
-          <p className="text-slate-500 font-medium text-xl">{t('scan_desc')}</p>
-        </div>
-      </div>
+      ) : (
+        <>
+          <div className="flex items-center gap-4 mb-8">
+            <div className="bg-emerald-100 p-3 rounded-2xl">
+              <FileCheck className="w-8 h-8 text-emerald-600" />
+            </div>
+            <div>
+              <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">{t('scan_complete')}</h2>
+              <p className="text-slate-500 font-medium text-xl">{t('scan_desc')}</p>
+            </div>
+          </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar pr-4 space-y-6">
         
@@ -228,6 +247,8 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
            )}
         </LiquidButton>
       </div>
+      </>
+      )}
     </motion.div>
   );
 }

@@ -162,7 +162,14 @@ function KioskApp() {
                     startSession(
                       patientData.department || 'allopathic', 
                       language, 
-                      { name: patientData.full_name, age: patientData.age, sex: patientData.gender }, 
+                      { 
+                        name: patientData.full_name, 
+                        age: patientData.age, 
+                        sex: patientData.gender,
+                        weight: patientData.weight,
+                        height: patientData.height,
+                        vitals: patientData.vitals
+                      }, 
                       patientData.patient_id, 
                       sessionData.session_id
                     );
@@ -243,19 +250,27 @@ function KioskApp() {
               <AnimatedRoute routeKey="upload" direction={direction} isKiosk={true}>
                 <Screen5_DocumentScanner
                   language={ui?.language || pendingSession?.language || 'en-IN'}
-                  onNext={async (file: File) => {
+                  onNext={async (files: File[]) => {
                     setDirection(1);
-                    if (file && ui?.session_id) {
+                    if (files && files.length > 0 && ui?.session_id) {
                       const formData = new FormData();
-                      formData.append('file', file);
+                      files.forEach(file => {
+                        formData.append('files', file);
+                      });
                       formData.append('session_id', ui.session_id);
+                      formData.append('patient_name', ui?.patient_name || ui?.patient_record?.patient_name || 'Unknown Patient');
                       try {
-                        await fetch(`${API_BASE_URL}/api/ocr`, {
+                        const response = await fetch(`${API_BASE_URL}/api/ocr/batch`, {
                           method: 'POST',
                           body: formData,
                         });
-                      } catch (e) {
+                        const data = await response.json();
+                        if (data.status === 'rejected') {
+                          throw new Error(`Verification Failed: ${data.reason || 'Document mismatch. Please verify and re-upload.'}`);
+                        }
+                      } catch (e: any) {
                         console.error("OCR upload failed", e);
+                        throw e; // Propagate to Screen5
                       }
                     }
                     sendInput('next', '');
@@ -289,7 +304,12 @@ function KioskApp() {
             <Route path="/kiosk/triage" element={
               <AnimatedRoute routeKey="triage" direction={direction} isKiosk={true}>
                 <Screen7_TriageAlert
-                  onAcknowledge={() => clearRedflag()}
+                  onResume={() => clearRedflag()}
+                  onNewPatient={() => {
+                    sessionStorage.removeItem('swasthyasync_session');
+                    localStorage.removeItem('kiosk_session_id');
+                    window.location.href = '/kiosk/login';
+                  }}
                 />
               </AnimatedRoute>
             } />
@@ -302,6 +322,7 @@ function KioskApp() {
                   language={ui?.language || pendingSession?.language || 'en-IN'}
                   onReset={() => {
                     sessionStorage.removeItem('swasthyasync_session');
+                    localStorage.removeItem('kiosk_session_id');
                     window.location.href = '/kiosk/login';
                   }} 
                 />

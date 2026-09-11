@@ -59,7 +59,7 @@ sessions: dict[str, DialogueManager] = {}
 async def lifespan(app: FastAPI):
     logger.info("SwasthyaSync backend starting...")
     from database import setup_database
-    setup_database()
+    await setup_database()
     from pdf_generator import pdf_engine
     try:
         await pdf_engine.start()
@@ -135,15 +135,40 @@ async def upload_document(
     image_bytes = await file.read()
     content_type = file.content_type or "image/jpeg"
     
-    # Save the file locally so we can display it later
+    from supabase import create_client
     import uuid
     os.makedirs("uploads", exist_ok=True)
     safe_filename = f"{uuid.uuid4().hex[:8]}_{file.filename or 'doc.jpg'}"
-    file_path = os.path.join("uploads", safe_filename)
-    with open(file_path, "wb") as f:
-        f.write(image_bytes)
+    
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    storage_path = "vision_ai"
+
+    if supabase_url and supabase_key:
+        supabase = create_client(supabase_url, supabase_key)
+        storage_path = f"patient-documents/{safe_filename}"
+        try:
+            supabase.storage.from_("patient-records").upload(
+                file=image_bytes,
+                path=storage_path,
+                file_options={"content-type": content_type}
+            )
+            url_resp = supabase.storage.from_("patient-records").create_signed_url(storage_path, 604800)
+            storage_path = url_resp.get("signedURL", storage_path)
+        except Exception as e:
+            logger.error(f"Supabase upload error: {e}")
+            # fallback to local
+            file_path = os.path.join("uploads", safe_filename)
+            with open(file_path, "wb") as f:
+                f.write(image_bytes)
+            storage_path = f"/uploads/{safe_filename}"
+    else:
+        file_path = os.path.join("uploads", safe_filename)
+        with open(file_path, "wb") as f:
+            f.write(image_bytes)
+        storage_path = f"/uploads/{safe_filename}"
     result = await process_document(image_bytes, filename=file.filename or "doc.jpg", media_type=content_type)
-    result["image_url"] = f"/uploads/{safe_filename}"
+    result["image_url"] = storage_path
 
     # If we have a session, merge OCR entities into the patient record
     logger.info(f"upload_document received session_id: {session_id}, in sessions? {session_id in sessions}")
@@ -154,15 +179,22 @@ async def upload_document(
         from patient_record import DocumentExtraction
         import database
         
-        # Save to DB
+        # Save to DB via asyncpg
         meds = result.get("medications", [])
-        labs = result.get("diagnoses", [])
-        # database.save_uploaded_document does not exist, so we skip it
-        # and directly append the DocumentExtraction to the record.
+        labs = result.get("lab_values", [])
+        doc_id = await database.save_uploaded_document(
+            session_id=session_id,
+            file_path=storage_path,
+            document_type=result.get("document_type", "OTHER"),
+            ocr_raw=result,
+            medications=meds,
+            labs=labs
+        )
+        
         doc_ext = DocumentExtraction(
-            doc_id="doc_" + str(int(time.time())),
+            doc_id=doc_id,
             doc_type=result.get("document_type", "unknown"),
-            ocr_path=f"/uploads/{safe_filename}",
+            ocr_path=storage_path,
             entities=[result],
         )
         dm.record.document_extractions.append(doc_ext)
@@ -177,36 +209,80 @@ async def upload_document(
 async def upload_document_batch(
     files: List[UploadFile] = File(...),
     session_id: str = Form(""),
+    patient_name: str = Form("Unknown Patient")
 ):
     """Upload multiple document images for batch OCR processing."""
-    async def process_single_file(file: UploadFile):
-        image_bytes = await file.read()
-        content_type = file.content_type or "image/jpeg"
-        return await process_document(image_bytes, filename=file.filename or "doc.jpg", media_type=content_type)
-        
-    tasks = [process_single_file(f) for f in files]
-    results = await asyncio.gather(*tasks)
+    if len(files) > 5:
+        raise HTTPException(status_code=400, detail="Maximum 5 images allowed per batch.")
+
+    image_bytes_list = []
+    media_types = []
+    storage_paths = []
     
-    logger.info(f"upload_document received session_id: {session_id}, in sessions? {session_id in sessions}")
+    from supabase import create_client
+    import uuid
+    import os
+    
+    supabase_url = os.getenv("SUPABASE_URL")
+    supabase_key = os.getenv("SUPABASE_KEY")
+    supabase = create_client(supabase_url, supabase_key) if supabase_url and supabase_key else None
+    
+    for file in files:
+        img_bytes = await file.read()
+        image_bytes_list.append(img_bytes)
+        ctype = file.content_type or "image/jpeg"
+        media_types.append(ctype)
+        
+        safe_filename = f"{uuid.uuid4().hex[:8]}_{file.filename or 'doc.jpg'}"
+        if supabase:
+            storage_path = f"patient-documents/{safe_filename}"
+            try:
+                supabase.storage.from_("patient-records").upload(
+                    file=img_bytes, path=storage_path, file_options={"content-type": ctype}
+                )
+                url_resp = supabase.storage.from_("patient-records").create_signed_url(storage_path, 604800)
+                storage_paths.append(url_resp.get("signedURL", storage_path))
+            except Exception as e:
+                logger.error(f"Supabase upload error: {e}")
+                storage_paths.append(f"local_upload_{safe_filename}")
+        else:
+            storage_paths.append(f"local_upload_{safe_filename}")
+
+    from ocr_pipeline import process_batch_ocr
+    result = await process_batch_ocr(image_bytes_list, media_types, patient_name)
+    
+    if not result.get("is_valid_medical_document") or result.get("name_match") is False:
+        return {"status": "rejected", "reason": result.get("rejection_reason", "Document rejected due to patient name mismatch or invalid format.")}
+        
+    logger.info(f"batch upload received session_id: {session_id}, in sessions? {session_id in sessions}")
     if session_id and session_id in sessions:
-        logger.info(f"Found session in upload_document: {session_id}")
         dm = sessions[session_id]
         from patient_record import DocumentExtraction
-        for res in results:
-            doc_ext = DocumentExtraction(
-                doc_id=res.get("doc_id", "unknown"),
-                doc_type=res.get("document_type", "unknown"),
-                ocr_path="vision_ai",
-                entities=[res],
-            )
-            dm.record.document_extractions.append(doc_ext)
+        import database
+        
+        # Save to DB via asyncpg
+        doc_id = await database.save_uploaded_document(
+            session_id=session_id,
+            file_path=",".join(storage_paths), # Multiple paths for PDF attachment later
+            document_type=result.get("document_type", "batch"),
+            ocr_raw=result,
+            medications=result.get("medications", []),
+            labs=result.get("lab_values", [])
+        )
+        
+        doc_ext = DocumentExtraction(
+            doc_id=doc_id,
+            doc_type=result.get("document_type", "batch"),
+            ocr_path=",".join(storage_paths),
+            entities=[result],
+        )
+        dm.record.document_extractions.append(doc_ext)
             
-        # Pre-calculate unverifiable values so they can be shown in Screen 6
         from document_red_flags import check_document_flags
         doc_extractions_raw = [ext.model_dump() for ext in dm.record.document_extractions]
         check_document_flags(doc_extractions_raw, dm.record)
 
-    return {"status": "success", "results": results}
+    return {"status": "success", "results": [result]}
 
 @app.get("/api/record/{session_id}/timeline")
 async def get_patient_timeline(session_id: str):
@@ -479,6 +555,26 @@ async def websocket_session(ws: WebSocket, session_id: str = Query(None)):
                         dm.record.session_id,
                         f"{latest_flag.rule_id}: {latest_flag.description}"
                     )
+
+                # --- NEW: Safely save the session state to DB in the async loop ---
+                try:
+                    import database
+                    record_payload = {
+                        "filled_state": dm.record.filled_state,
+                        "document_extractions": [e.model_dump() for e in dm.record.document_extractions],
+                        "red_flags": [r.model_dump() for r in dm.record.red_flags]
+                    }
+                    has_red_flags = len(dm.record.red_flags) > 0
+                    await database.commit_fsm_checkpoint(
+                        session_id=dm.record.session_id,
+                        filled_state=record_payload,
+                        chief_complaint=str(dm.record.chief_complaint.value or "") if dm.record.chief_complaint else "",
+                        interview_qa=dm.record.conversation_history,
+                        priority_flag=has_red_flags,
+                        status="IN_PROGRESS"
+                    )
+                except Exception as e:
+                    logger.error(f"🚨 Checkpoint failed for session {dm.record.session_id} - {e}")
 
                 elapsed = time.time() - t0
                 logger.info(f"DialogueManager.process_patient_input took {elapsed:.2f}s | state={dm.fsm.state}")

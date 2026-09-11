@@ -15,6 +15,7 @@ The Dialogue Manager:
 """
 
 from __future__ import annotations
+import asyncio
 import logging
 
 from macro_fsm import MacroFSM
@@ -127,14 +128,7 @@ class DialogueManager:
                         "red_flags": [r.model_dump() for r in self.record.red_flags]
                     }
                     has_red_flags = len(self.record.red_flags) > 0
-                    database.commit_fsm_checkpoint(
-                        session_id=self.record.session_id,
-                        filled_state=record_payload,
-                        chief_complaint=str(self.record.chief_complaint.value or ""),
-                        interview_qa=self.record.conversation_history,
-                        priority_flag=has_red_flags,
-                        status="IN_PROGRESS"
-                    )
+                    pass
                 except Exception as e:
                     logger.error(f"🚨 CRITICAL FAULT: Failed to persist session {self.record.session_id} - {e}")
 
@@ -252,20 +246,7 @@ class DialogueManager:
         self.fsm.set_state("DYNAMIC_INTERVIEW")
         self.record.macro_state = "DYNAMIC_INTERVIEW"
 
-        # Checkpoint the chief complaint immediately to the database
-        try:
-            import database
-            has_red_flags = len(self.record.red_flags) > 0
-            database.commit_fsm_checkpoint(
-                session_id=self.record.session_id,
-                filled_state={"filled_state": self.record.filled_state},
-                chief_complaint=str(self.record.chief_complaint.value or ""),
-                interview_qa=self.record.conversation_history,
-                priority_flag=has_red_flags,
-                status="IN_PROGRESS"
-            )
-        except Exception as e:
-            logger.error(f"🚨 Checkpoint failed for session {self.record.session_id} - {e}")
+        # Removed db checkpoint here, handled in main.py
 
         return self._build_ui_instruction()
 
@@ -329,19 +310,7 @@ class DialogueManager:
             logger.info(f"Interview complete at turn {self.record.interview_turn_count}")
             self.fsm.advance()  # → DOCUMENT_SCAN
             self.record.macro_state = self.fsm.state
-            try:
-                import database
-                has_red_flags = len(self.record.red_flags) > 0
-                database.commit_fsm_checkpoint(
-                    session_id=self.record.session_id,
-                    filled_state={"filled_state": self.record.filled_state},
-                    chief_complaint=str(self.record.chief_complaint.value or ""),
-                    interview_qa=self.record.conversation_history,
-                    priority_flag=has_red_flags,
-                    status="IN_PROGRESS"
-                )
-            except Exception as e:
-                pass
+            # Removed db checkpoint here, handled in main.py
             return self._build_ui_instruction()
 
         # 6. SELECT NEXT FIELD
@@ -350,19 +319,7 @@ class DialogueManager:
             # All fields filled — advance
             self.fsm.advance()
             self.record.macro_state = self.fsm.state
-            try:
-                import database
-                has_red_flags = len(self.record.red_flags) > 0
-                database.commit_fsm_checkpoint(
-                    session_id=self.record.session_id,
-                    filled_state={"filled_state": self.record.filled_state},
-                    chief_complaint=str(self.record.chief_complaint.value or ""),
-                    interview_qa=self.record.conversation_history,
-                    priority_flag=has_red_flags,
-                    status="IN_PROGRESS"
-                )
-            except Exception as e:
-                pass
+            # Removed db checkpoint here, handled in main.py
             return self._build_ui_instruction()
 
         # 7. GENERATE QUESTION for the selected field
@@ -383,19 +340,7 @@ class DialogueManager:
             "assistant", result.spoken_text, next_field.get("category", "HPI")
         )
 
-        try:
-            import database
-            has_red_flags = len(self.record.red_flags) > 0
-            database.commit_fsm_checkpoint(
-                session_id=self.record.session_id,
-                filled_state={"filled_state": self.record.filled_state},
-                chief_complaint=str(self.record.chief_complaint.value or ""),
-                interview_qa=self.record.conversation_history,
-                priority_flag=has_red_flags,
-                status="IN_PROGRESS"
-            )
-        except Exception as e:
-            logger.error(f"🚨 Checkpoint failed for session {self.record.session_id} - {e}")
+        # Removed db checkpoint here, handled in main.py
 
         # 8. Build UI response
         return self._build_dynamic_ui(result, next_field)
@@ -543,7 +488,7 @@ class DialogueManager:
             return self._build_dynamic_ui(result, next_f)
 
         if state == "DOCUMENT_SCAN":
-            return {**base, "screen": "document_scan", "orb_state": "idle"}
+            return {**base, "screen": "document_scan", "orb_state": "idle", "patient_name": self.record.patient_name}
 
         if state == "SUMMARY_CONFIRMATION":
             return {

@@ -56,6 +56,7 @@ export interface UIInstruction {
 
   // Summary/Complete fields
   patient_record?: any;
+  patient_name?: string;
 }
 
 interface UseConversationReturn {
@@ -210,8 +211,10 @@ export function useConversation(): UseConversationReturn {
   }, [send]);
 
   const sendRedflag = useCallback(() => {
-    send({ type: 'redflag' });
-  }, [send]);
+    if (ui) {
+      send({ type: 'redflag' });
+    }
+  }, [send, ui]);
 
   const clearRedflag = useCallback(() => {
     send({ type: 'clear_redflag' });

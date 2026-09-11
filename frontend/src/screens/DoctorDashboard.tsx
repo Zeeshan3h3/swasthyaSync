@@ -12,17 +12,32 @@ export const DoctorDashboard: React.FC = () => {
   const [action, setAction] = useState('Prescribe Meds');
   const [isSaving, setIsSaving] = useState(false);
 
+  const [error, setError] = useState<string | null>(null);
+
   useEffect(() => {
-    // Fetch patient data from triage queue or a specific endpoint
-    // For simplicity we will fetch the triage queue and find our patient
+    // Fetch patient data from triage queue first
     fetch(`${getApiBaseUrl()}/api/triage/queue`)
       .then(res => res.json())
-      .then(data => {
+      .then(async data => {
         const q = data.queue || data || [];
         const p = q.find((x: any) => x.session_id === session_id);
-        if (p) setPatient(p);
+        if (p) {
+          setPatient(p);
+        } else {
+          // If not in queue, fetch directly (might be completed or just not in triage queue)
+          const res = await fetch(`${getApiBaseUrl()}/api/session/${session_id}`);
+          if (res.ok) {
+            const data = await res.json();
+            setPatient(data);
+          } else {
+            setError('Encounter not found or already completed.');
+          }
+        }
       })
-      .catch(console.error);
+      .catch(err => {
+        console.error(err);
+        setError('Failed to load encounter.');
+      });
   }, [session_id]);
 
   const handleComplete = async () => {
@@ -49,9 +64,21 @@ export const DoctorDashboard: React.FC = () => {
     }
   };
 
+  if (error) return (
+    <div className="h-screen w-full flex flex-col items-center justify-center p-8 bg-slate-50">
+      <div className="text-red-500 text-xl font-bold mb-4">{error}</div>
+      <LiquidButton onClick={() => navigate('/doctor')} className="bg-slate-200 text-slate-700 px-6 py-2 rounded-lg font-bold">
+        Back to Queue
+      </LiquidButton>
+    </div>
+  );
+
   if (!patient) return (
     <div className="h-screen w-full flex items-center justify-center p-8 bg-slate-50">
-      <div className="text-slate-600 text-xl font-medium">Loading Encounter...</div>
+      <div className="text-slate-600 text-xl font-medium flex items-center gap-2">
+        <div className="w-5 h-5 border-2 border-slate-600 border-t-transparent rounded-full animate-spin" />
+        Loading Encounter...
+      </div>
     </div>
   );
 

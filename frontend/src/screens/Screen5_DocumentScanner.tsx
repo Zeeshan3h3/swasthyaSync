@@ -1,6 +1,6 @@
 import { LiquidButton } from '../components/ui/button';
 import { useState, useRef } from 'react';
-import { Camera, UploadCloud, X, ArrowRight, FileText, Loader2 } from 'lucide-react';
+import { Camera, UploadCloud, X, ArrowRight, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { useTranslations } from '../translations';
 import { useEffect } from 'react';
@@ -37,51 +37,63 @@ function DynamicLoadingText() {
 
 interface Props {
   language: string;
-  onNext: (file: File) => void;
+  onNext: (files: File[]) => Promise<void> | void;
   onSkip: () => void;
 }
 
 export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
   const { t } = useTranslations(language);
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [files, setFiles] = useState<File[]>([]);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files[0]) {
-      const selectedFile = e.target.files[0];
-      setFile(selectedFile);
-      
-      // Create preview for images
-      if (selectedFile.type.startsWith('image/')) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          setPreview(reader.result as string);
-        };
-        reader.readAsDataURL(selectedFile);
-      } else {
-        setPreview(null);
+    if (e.target.files) {
+      const selectedFiles = Array.from(e.target.files);
+      if (selectedFiles.length + files.length > 5) {
+        alert("Maximum 5 images allowed.");
+        return;
       }
+      
+      const newFiles = [...files, ...selectedFiles];
+      setFiles(newFiles);
+      
+      const newPreviews = [...previews];
+      selectedFiles.forEach((file) => {
+        if (file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onloadend = () => {
+            newPreviews.push(reader.result as string);
+            setPreviews([...newPreviews]); // Trigger re-render with new array
+          };
+          reader.readAsDataURL(file);
+        }
+      });
     }
   };
 
   const handleClear = () => {
-    setFile(null);
-    setPreview(null);
+    setFiles([]);
+    setPreviews([]);
+    setErrorMsg(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
   };
 
-  const handleSubmit = () => {
-    if (file) {
+  const handleSubmit = async () => {
+    if (files.length > 0) {
       setIsProcessing(true);
-      // Simulate slight delay for UI feedback before passing to parent
-      setTimeout(() => {
-        onNext(file);
-      }, 500);
+      setErrorMsg(null);
+      try {
+        await onNext(files);
+      } catch (err: any) {
+        setErrorMsg(err.message || "Document verification failed. Please check the document and re-upload.");
+        setIsProcessing(false);
+      }
     }
   };
 
@@ -100,25 +112,25 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
       </div>
 
       <div className="flex-1 w-full max-w-3xl flex flex-col justify-center relative">
-        
-        {/* Hidden Inputs */}
-        <input
-          type="file"
-          accept="image/*,application/pdf"
-          className="hidden"
-          ref={fileInputRef}
-          onChange={handleFileChange}
-        />
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          className="hidden"
-          ref={cameraInputRef}
-          onChange={handleFileChange}
-        />
+        <input 
+              type="file" 
+              accept="image/*,.pdf" 
+              className="hidden" 
+              ref={fileInputRef} 
+              multiple
+              onChange={handleFileChange} 
+            />
+            <input 
+              type="file" 
+              accept="image/*" 
+              capture="environment" 
+              className="hidden" 
+              ref={cameraInputRef} 
+              multiple
+              onChange={handleFileChange} 
+            />
 
-        {!file ? (
+        {files.length === 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 h-full max-h-[400px]">
             {/* Camera Option */}
             <LiquidButton
@@ -141,7 +153,7 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
                 <UploadCloud className="w-10 h-10 text-teal-600" />
               </div>
               <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('upload_file')}</h3>
-              <p className="text-slate-500 font-medium">{t('pdf_or_image')}</p>
+              <p className="text-slate-500 font-medium">{t('pdf_or_image')} (Max 5)</p>
             </LiquidButton>
           </div>
         ) : (
@@ -158,30 +170,34 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
               <X className="w-6 h-6" />
             </LiquidButton>
 
-            {preview ? (
-              <div className="w-48 h-48 sm:w-64 sm:h-64 rounded-2xl overflow-hidden mb-6 border-4 border-white shadow-lg relative">
-                {isProcessing && (
-                  <div className="absolute inset-0 bg-white/70 backdrop-blur-md z-10 flex flex-col items-center justify-center p-4 text-center">
-                    <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-3" />
-                    <DynamicLoadingText />
-                  </div>
-                )}
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={preview} alt="Document preview" className="w-full h-full object-cover" />
-              </div>
-            ) : (
-              <div className="w-40 h-40 bg-blue-50 rounded-2xl flex flex-col items-center justify-center mb-6 border-2 border-blue-100 text-blue-500">
-                <FileText className="w-16 h-16 mb-2" />
-                <span className="font-bold text-sm">{t('pdf_document')}</span>
+            <div className="flex flex-wrap justify-center gap-4 w-full h-full overflow-y-auto pt-8">
+              {previews.map((prev, idx) => (
+                <div key={idx} className="w-32 h-32 sm:w-40 sm:h-40 rounded-xl overflow-hidden border-2 border-slate-200 relative shrink-0 shadow-sm">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={prev} alt={`Preview ${idx+1}`} className="w-full h-full object-cover" />
+                </div>
+              ))}
+            </div>
+
+            {isProcessing && (
+              <div className="absolute inset-0 bg-white/70 backdrop-blur-md z-10 flex flex-col items-center justify-center p-4 text-center">
+                <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-3" />
+                <DynamicLoadingText />
               </div>
             )}
             
-            <h3 className="text-xl font-bold text-slate-800 truncate max-w-sm px-4">
-              {file.name}
-            </h3>
-            <p className="text-slate-400 font-medium mt-1">
-              {(file.size / 1024 / 1024).toFixed(2)} MB
-            </p>
+            {errorMsg ? (
+              <div className="mt-4 text-center bg-red-50 border border-red-200 rounded-xl p-4 w-full">
+                <p className="text-red-600 font-bold text-sm sm:text-base">{errorMsg}</p>
+                <p className="text-red-500 text-xs mt-1">Please clear and try again.</p>
+              </div>
+            ) : (
+              <div className="mt-4 text-center">
+                <h3 className="text-lg font-bold text-slate-800">
+                  {files.length} document{files.length !== 1 ? 's' : ''} ready
+                </h3>
+              </div>
+            )}
           </motion.div>
         )}
       </div>
@@ -196,9 +212,9 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
         </LiquidButton>
         <LiquidButton
           onClick={handleSubmit}
-          disabled={!file || isProcessing}
+          disabled={files.length === 0 || isProcessing}
           className={`group relative flex-1 overflow-hidden flex items-center justify-center gap-3 rounded-full py-5 font-extrabold shadow-2xl transition-all transform active:scale-95 text-xl cursor-pointer ${
-            file && !isProcessing
+            files.length > 0 && !isProcessing
               ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'
               : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
           }`}

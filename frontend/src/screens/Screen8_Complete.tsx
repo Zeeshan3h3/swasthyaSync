@@ -41,19 +41,45 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
   const chiefComplaint = patientRecord?.chief_complaint?.value;
   const filledState = patientRecord?.filled_state || {};
 
-  // Extract common vitals/measurements if available
-  const weight = filledState?.weight?.value || filledState?.wt?.value || 'N/A';
-  const height = filledState?.height?.value || filledState?.ht?.value || 'N/A';
-  const vitals = filledState?.vitals?.value || filledState?.blood_pressure?.value || 'N/A';
+  // Extract common vitals/measurements — search by substring since dynamic schema uses IDs like body_weight_kg
+  const findFilledValue = (keywords: string[]) => {
+    for (const [key, data] of Object.entries(filledState) as [string, any][]) {
+      if (data?.value && keywords.some(kw => key.toLowerCase().includes(kw))) {
+        return String(data.value);
+      }
+    }
+    return null;
+  };
+  const weight = findFilledValue(['weight', 'wt']) || 'N/A';
+  const height = findFilledValue(['height', 'ht']) || 'N/A';
+  const vitals = findFilledValue(['blood_pressure', 'bp', 'vitals', 'pulse']) || 'N/A';
 
   const documents = patientRecord?.document_extractions || [];
 
+  const vitalsKeywords = ['weight', 'wt', 'height', 'ht', 'vitals', 'blood_pressure', 'bp', 'pulse'];
+  const isVitalsKey = (key: string) => vitalsKeywords.some(kw => key.toLowerCase().includes(kw));
+
+  const hasClinicalDetails = Object.entries(filledState).some(([key, data]: [string, any]) => {
+    if (!data || data.status === 'empty' || !data.value) return false;
+    if (isVitalsKey(key)) return false;
+    return true;
+  });
+
   const handleSendToDoctor = async () => {
     setIsSending(true);
-    // Simulate sending to doctor
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    setIsSending(false);
-    setIsSent(true);
+    try {
+      if (sessionId) {
+        await fetch(`${getApiBaseUrl()}/api/session/${sessionId}/submit`, {
+          method: 'POST',
+        });
+      }
+      setIsSent(true);
+    } catch (err) {
+      console.error('Failed to submit to doctor:', err);
+      alert('Failed to send to doctor. Please try again.');
+    } finally {
+      setIsSending(false);
+    }
   };
 
   if (isSent) {
@@ -187,27 +213,29 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
         </div>
 
         {/* Collected Details */}
-        <div className="mb-6">
-          <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
-            <FileText className="w-4 h-4" />
-            {t('clinical_details')}
-          </h4>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {Object.entries(filledState).map(([key, data]: [string, any]) => {
-              if (!data || data.status === 'empty' || !data.value) return null;
-              if (['weight', 'wt', 'height', 'ht', 'vitals', 'blood_pressure'].includes(key.toLowerCase())) return null; // Already shown
-              
-              const label = data.question || key.replace(/_/g, ' ');
-              
-              return (
-                <div key={key} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
-                  <p className="text-xs font-semibold text-slate-500 mb-1 capitalize">{label}</p>
-                  <p className="text-sm font-medium text-slate-900">{String(data.value)}</p>
-                </div>
-              );
-            })}
+        {hasClinicalDetails && (
+          <div className="mb-6">
+            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <FileText className="w-4 h-4" />
+              {t('clinical_details')}
+            </h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {Object.entries(filledState).map(([key, data]: [string, any]) => {
+                if (!data || data.status === 'empty' || !data.value) return null;
+                if (isVitalsKey(key)) return null;
+                
+                const label = data.question || key.replace(/_/g, ' ');
+                
+                return (
+                  <div key={key} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                    <p className="text-xs font-semibold text-slate-500 mb-1 capitalize">{label}</p>
+                    <p className="text-sm font-medium text-slate-900">{String(data.value)}</p>
+                  </div>
+                );
+              })}
+            </div>
           </div>
-        </div>
+        )}
         
         {/* Document Info */}
         {documents.length > 0 && (
@@ -222,15 +250,22 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
                const meds = entity.medications || [];
                const labs = entity.lab_values || [];
                const diags = entity.diagnoses || [];
-               const imageUrl = doc.ocr_path ? (doc.ocr_path.startsWith('http') ? doc.ocr_path : `${getApiBaseUrl()}${doc.ocr_path}`) : null;
+               const imageUrls = doc.ocr_path ? doc.ocr_path.split(',').map((p: string) => p.trim()) : [];
                
                return (
                  <div key={i} className="mb-4 bg-slate-50 border border-slate-200 rounded-xl overflow-hidden flex flex-col md:flex-row">
-                    {/* Document Image */}
-                    {imageUrl ? (
-                      <div className="md:w-1/3 bg-slate-200 shrink-0">
-                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                         <img src={imageUrl} alt="Uploaded Document" className="w-full h-full object-cover min-h-[200px]" />
+                    {/* Document Images */}
+                    {imageUrls.length > 0 ? (
+                      <div className="md:w-1/3 shrink-0 flex overflow-x-auto snap-x">
+                        {imageUrls.map((url: string, idx: number) => {
+                          const src = url.startsWith('http') ? url : `${getApiBaseUrl()}${url}`;
+                          return (
+                            <div key={idx} className="w-full shrink-0 snap-center bg-slate-200">
+                              {/* eslint-disable-next-line @next/next/no-img-element */}
+                              <img src={src} alt={`Uploaded Document ${idx+1}`} className="w-full h-full object-cover min-h-[200px]" />
+                            </div>
+                          );
+                        })}
                       </div>
                     ) : (
                       <div className="md:w-1/3 bg-slate-100 shrink-0 flex items-center justify-center p-6 border-r border-slate-200">

@@ -4,17 +4,18 @@ import { ShieldAlert } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 interface Props {
-  onAcknowledge: () => void;
+  onResume: () => void;
+  onNewPatient: () => void;
 }
 
-export function Screen7_TriageAlert({ onAcknowledge }: Props) {
+export function Screen7_TriageAlert({ onResume, onNewPatient }: Props) {
   useEffect(() => {
-    // Auto-acknowledge after 7 seconds if the user doesn't tap
+    // Auto-resume interview after 10 seconds if the user doesn't tap
     const timer = setTimeout(() => {
-      onAcknowledge();
-    }, 7000);
+      onResume();
+    }, 10000);
     return () => clearTimeout(timer);
-  }, [onAcknowledge]);
+  }, [onResume]);
 
   return (
     <motion.div 
@@ -49,12 +50,21 @@ export function Screen7_TriageAlert({ onAcknowledge }: Props) {
         A nurse has been alerted and will see you immediately.
       </p>
 
-      <LiquidButton
-        onClick={onAcknowledge}
-        className="relative z-10 group overflow-hidden bg-red-600 text-white px-12 py-5 rounded-full font-bold shadow-xl shadow-red-600/30 hover:bg-red-700 transition-all active:scale-95 text-lg flex items-center gap-3"
-      >
-        <span className="relative z-10">I Understand</span>
-      </LiquidButton>
+      <div className="relative z-10 flex flex-col sm:flex-row gap-4">
+        <LiquidButton
+          onClick={onResume}
+          className="group overflow-hidden bg-white text-red-700 border-2 border-red-200 px-10 py-5 rounded-full font-bold shadow-lg hover:bg-red-50 transition-all active:scale-95 text-lg flex items-center gap-3"
+        >
+          <span className="relative z-10">I Understand, Continue</span>
+        </LiquidButton>
+        <LiquidButton
+          onClick={onNewPatient}
+          className="group overflow-hidden bg-red-600 text-white px-10 py-5 rounded-full font-bold shadow-xl shadow-red-600/30 hover:bg-red-700 transition-all active:scale-95 text-lg flex items-center gap-3"
+        >
+          <span className="relative z-10">Start New Patient</span>
+        </LiquidButton>
+      </div>
     </motion.div>
   );
 }
+
