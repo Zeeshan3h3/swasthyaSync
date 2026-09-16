@@ -79,7 +79,7 @@ async def add_doctor(req: DoctorReq):
         raise HTTPException(status_code=400, detail=str(e))
 
 @admin_router.put("/doctors/{doctor_id}")
-async def update_doctor(doctor_id: int, req: DoctorUpdateReq):
+async def update_doctor(doctor_id: str, req: DoctorUpdateReq):
     try:
         # Since we might not want to overwrite current_status if it's not in req, we can leave it as default or fetch it first.
         # But for now, we'll fetch the existing doctor to keep their current_status.

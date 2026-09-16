@@ -2,8 +2,9 @@ import { LiquidButton } from '../components/ui/button';
 import { useState, useRef } from 'react';
 import { Camera, UploadCloud, X, ArrowRight, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
-import { useTranslations } from '../translations';
+import { useTranslation } from '../hooks/useTranslation';
 import { useEffect } from 'react';
+import { useAudioGuide } from '../hooks/useAudioGuide';
 
 function DynamicLoadingText() {
   const [index, setIndex] = useState(0);
@@ -41,12 +42,18 @@ interface Props {
   onSkip: () => void;
 }
 
-export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
-  const { t } = useTranslations(language);
+export function Screen5_DocumentScanner({ onNext, onSkip }: Props) {
+  const { t } = useTranslation();
   const [files, setFiles] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const { speak, stop } = useAudioGuide();
+  
+  useEffect(() => {
+    speak('upload_docs');
+    return () => stop();
+  }, [speak, stop]);
   
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -105,9 +112,9 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
       className="flex flex-col flex-1 p-6 sm:p-12 items-center text-center h-full"
     >
       <div className="w-full max-w-3xl mb-12">
-        <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 mb-4 tracking-tighter">{t('past_records')}</h2>
+        <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 mb-4 tracking-tighter">{t('docs.title')}</h2>
         <p className="text-xl text-slate-500 font-medium max-w-2xl mx-auto">
-          {t('past_records_desc')}
+          {t('docs.subtitle')}
         </p>
       </div>
 
@@ -135,32 +142,32 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
             {/* Camera Option */}
             <LiquidButton
               onClick={() => cameraInputRef.current?.click()}
-              className="group flex flex-col items-center justify-center bg-white border-2 border-dashed border-slate-200 rounded-3xl p-8 hover:border-blue-500 hover:bg-blue-50 transition-all duration-300"
+              className="group flex flex-col items-center justify-center bg-slate-50 rounded-[2rem] p-8 shadow-soft-1 hover:shadow-soft-2 transition-all duration-300 border-none"
             >
               <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-inner">
                 <Camera className="w-10 h-10 text-blue-600" />
               </div>
-              <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('take_photo')}</h3>
-              <p className="text-slate-500 font-medium">{t('hold_document')}</p>
+              <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('docs.take_photo')}</h3>
+              <p className="text-slate-500 font-medium">{t('docs.hold_document')}</p>
             </LiquidButton>
 
             {/* Upload Option */}
             <LiquidButton
               onClick={() => fileInputRef.current?.click()}
-              className="group flex flex-col items-center justify-center bg-white border-2 border-dashed border-slate-200 rounded-3xl p-8 hover:border-teal-500 hover:bg-teal-50 transition-all duration-300"
+              className="group flex flex-col items-center justify-center bg-slate-50 rounded-[2rem] p-8 shadow-soft-1 hover:shadow-soft-2 transition-all duration-300 border-none"
             >
               <div className="w-20 h-20 bg-teal-100 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-inner">
                 <UploadCloud className="w-10 h-10 text-teal-600" />
               </div>
-              <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('upload_file')}</h3>
-              <p className="text-slate-500 font-medium">{t('pdf_or_image')} (Max 5)</p>
+              <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('docs.upload_file')}</h3>
+              <p className="text-slate-500 font-medium">{t('docs.pdf_or_image')} (Max 5)</p>
             </LiquidButton>
           </div>
         ) : (
           <motion.div 
             initial={{ scale: 0.95, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="flex flex-col items-center justify-center bg-white border border-slate-200 rounded-3xl p-8 shadow-xl shadow-slate-200/50 h-full max-h-[400px] relative overflow-hidden"
+            className="flex flex-col items-center justify-center bg-slate-50 rounded-[2.5rem] p-8 shadow-soft-2 h-full max-h-[400px] relative overflow-hidden border-none"
           >
             <LiquidButton
               onClick={handleClear}
@@ -208,7 +215,7 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
           disabled={isProcessing}
           className="group flex items-center justify-center gap-2 px-8 py-5 rounded-full font-extrabold text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all w-1/3 text-lg disabled:opacity-50 cursor-pointer"
         >
-          {t('skip_this')}
+          {t('docs.skip')}
         </LiquidButton>
         <LiquidButton
           onClick={handleSubmit}
@@ -222,12 +229,12 @@ export function Screen5_DocumentScanner({ language, onNext, onSkip }: Props) {
           {isProcessing ? (
              <span className="relative z-10 flex items-center gap-3">
                 <Loader2 className="w-6 h-6 animate-spin" />
-                {t('analyzing_document')}
+                {t('docs.analyzing_document')}
              </span>
           ) : (
             <>
               <span className="relative z-10 flex items-center gap-2">
-                {t('process_document')}
+                {t('docs.process_document')}
                 <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
               </span>
             </>

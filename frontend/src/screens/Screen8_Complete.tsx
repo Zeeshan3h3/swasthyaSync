@@ -2,9 +2,10 @@ import { LiquidButton } from '../components/ui/button';
 import { CheckCircle2, Activity, FileText, Send, UserCircle, Pill, TestTube, AlertTriangle } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { useTranslations } from '../translations';
+import { useTranslation } from '../hooks/useTranslation';
 import { getApiBaseUrl } from '../config';
 import { useNavigate } from 'react-router-dom';
+import { useAudioGuide } from '../hooks/useAudioGuide';
 
 interface Props {
   language: string;
@@ -13,12 +14,17 @@ interface Props {
   sessionId?: string;
 }
 
-export function Screen8_Complete({ language, onReset, patientRecord, sessionId }: Props) {
-  const { t } = useTranslations(language);
+export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const [isSending, setIsSending] = useState(false);
   const [isSent, setIsSent] = useState(false);
   const [tokenInfo, setTokenInfo] = useState<{ token: string; doctor_name: string; room_number: string } | null>(null);
+  const { speak, stop } = useAudioGuide();
+
+  useEffect(() => {
+    return () => stop();
+  }, [stop]);
 
   useEffect(() => {
     if (sessionId) {
@@ -27,6 +33,7 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
         .then(data => {
           if (data.token) {
             setTokenInfo(data);
+            speak('token_gen', { token: String(data.token), dest: data.doctor_name || 'the doctor' });
           }
         })
         .catch(console.error);
@@ -106,20 +113,20 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
             <CheckCircle2 className="w-14 h-14" />
           </motion.div>
           
-          <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 mb-4 tracking-tighter">{t('sent_to_doctor')}</h2>
-          <p className="text-lg text-slate-500 mb-10 font-medium">{t('sent_to_doctor_desc')}</p>
+          <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 mb-4 tracking-tighter">{t('complete.sent_to_doctor')}</h2>
+          <p className="text-lg text-slate-500 mb-10 font-medium">{t('complete.sent_to_doctor_desc')}</p>
           
           <div className="bg-slate-50/50 rounded-3xl p-8 mb-10 border border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-6 shadow-inner">
             <div>
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('token_number')}</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('complete.token_number')}</p>
               <p className="text-4xl font-extrabold text-blue-600">{tokenNumber}</p>
             </div>
             <div className="sm:border-l sm:border-slate-200">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('room_number')}</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('complete.room_number')}</p>
               <p className="text-4xl font-extrabold text-slate-800">{roomNumber}</p>
             </div>
             <div className="sm:border-l sm:border-slate-200 flex flex-col justify-center">
-              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('doctor')}</p>
+              <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('complete.doctor')}</p>
               <p className="text-2xl font-extrabold text-slate-800">{assignedDoctor}</p>
             </div>
           </div>
@@ -141,7 +148,7 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
             }}
             className="w-full bg-slate-900 text-white px-8 py-5 rounded-full font-extrabold hover:bg-slate-800 transition-all text-xl shadow-xl shadow-slate-900/20 active:scale-95 mt-4"
           >
-            {t('start_new_patient')}
+            {t('complete.start_new_patient')}
           </LiquidButton>
         </div>
       </motion.div>
@@ -158,10 +165,10 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-50 via-transparent to-transparent pointer-events-none" />
 
       <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 mb-4 tracking-tighter">
-        {t('intake_complete')}, {patientName ? patientName.split(' ')[0] : t('patient_information').split(' ')[0]}
+        {t('complete.intake_complete')}, {patientName ? patientName.split(' ')[0] : 'Patient'}
       </h2>
       <p className="text-xl text-slate-500 font-medium mb-10 max-w-lg text-center">
-        {t('review_summary_desc')}
+        {t('complete.review_summary_desc')}
       </p>
 
       {/* Structured Info Card */}
@@ -169,7 +176,7 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
         initial={{ y: 20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="bg-white/90 backdrop-blur-2xl p-8 sm:p-10 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-white w-full max-w-4xl text-left mb-10"
+        className="bg-slate-50 p-8 sm:p-10 rounded-[2.5rem] shadow-soft-1 border-none w-full max-w-4xl text-left mb-10"
       >
         {/* Demographics Section */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 pb-8 border-b border-slate-100 gap-6">
@@ -178,24 +185,24 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
               <UserCircle className="w-8 h-8" />
             </div>
             <div>
-              <h3 className="text-2xl font-extrabold text-slate-800 tracking-tight">{patientName || t('unknown_patient')}</h3>
-              <p className="text-base text-slate-500 font-semibold mt-1">{age ? `${age} yrs` : t('age_na')} • {gender || t('gender_na')}</p>
+              <h3 className="text-2xl font-extrabold text-slate-800 tracking-tight">{patientName || t('complete.unknown_patient')}</h3>
+              <p className="text-base text-slate-500 font-semibold mt-1">{age ? `${age} yrs` : t('complete.age_na')} • {gender || t('complete.gender_na')}</p>
             </div>
           </div>
           
-          <div className="flex gap-6 sm:text-right bg-slate-50 p-4 rounded-2xl border border-slate-100">
+          <div className="flex gap-6 sm:text-right bg-slate-50 p-4 rounded-2xl shadow-soft-2 border-none">
             <div>
-              <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">{t('weight')}</p>
+              <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">{t('complete.weight')}</p>
               <p className="text-lg font-extrabold text-slate-700">{weight}</p>
             </div>
             <div className="w-px bg-slate-200" />
             <div>
-              <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">{t('height')}</p>
+              <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">{t('complete.height')}</p>
               <p className="text-lg font-extrabold text-slate-700">{height}</p>
             </div>
             <div className="w-px bg-slate-200" />
             <div>
-              <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">{t('vitals')}</p>
+              <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">{t('complete.vitals')}</p>
               <p className="text-lg font-extrabold text-slate-700">{vitals}</p>
             </div>
           </div>
@@ -205,10 +212,10 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
         <div className="mb-8">
           <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
             <Activity className="w-4 h-4 text-red-400" />
-            {t('chief_complaint')}
+            {t('complete.chief_complaint')}
           </h4>
-          <p className="text-xl font-semibold text-red-700 bg-red-50 p-5 rounded-2xl border border-red-100 shadow-inner">
-            {chiefComplaint || t('not_specified')}
+          <p className="text-xl font-semibold text-red-700 bg-slate-50 p-5 rounded-2xl shadow-soft-2 border-none">
+            {chiefComplaint || t('complete.not_specified')}
           </p>
         </div>
 
@@ -217,7 +224,7 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
           <div className="mb-6">
             <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
               <FileText className="w-4 h-4" />
-              {t('clinical_details')}
+              {t('complete.clinical_details')}
             </h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {Object.entries(filledState).map(([key, data]: [string, any]) => {
@@ -227,9 +234,14 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
                 const label = data.question || key.replace(/_/g, ' ');
                 
                 return (
-                  <div key={key} className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <div key={key} className="bg-slate-50 p-3 rounded-xl shadow-soft-2 border-none">
                     <p className="text-xs font-semibold text-slate-500 mb-1 capitalize">{label}</p>
                     <p className="text-sm font-medium text-slate-900">{String(data.value)}</p>
+                    {data.verbatim && String(data.verbatim) !== String(data.value) && (
+                      <p className="text-xs italic text-slate-400 mt-1 flex items-start gap-1">
+                        <span className="opacity-50">"</span>{String(data.verbatim)}<span className="opacity-50">"</span>
+                      </p>
+                    )}
                   </div>
                 );
               })}
@@ -242,7 +254,7 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
           <div>
              <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
                <FileText className="w-4 h-4" />
-               {t('attached_documents')}
+               {t('complete.attached_documents')}
              </h4>
              
              {documents.map((doc: any, i: number) => {
@@ -269,7 +281,7 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
                       </div>
                     ) : (
                       <div className="md:w-1/3 bg-slate-100 shrink-0 flex items-center justify-center p-6 border-r border-slate-200">
-                        <p className="text-slate-400 text-sm font-medium">{t('no_image')}</p>
+                        <p className="text-slate-400 text-sm font-medium">{t('complete.no_image')}</p>
                       </div>
                     )}
                     
@@ -277,7 +289,7 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
                     <div className="p-4 md:w-2/3 space-y-4">
                       {meds.length > 0 && (
                         <div>
-                          <h5 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 mb-1"><Pill className="w-3 h-3"/> {t('medications')}</h5>
+                          <h5 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 mb-1"><Pill className="w-3 h-3"/> {t('complete.medications')}</h5>
                           <div className="flex flex-wrap gap-1">
                             {meds.map((m: any, j: number) => <span key={j} className="text-xs font-semibold bg-teal-50 text-teal-700 px-2 py-1 rounded border border-teal-100">{m?.drug_name || m}</span>)}
                           </div>
@@ -286,7 +298,7 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
                       
                       {diags.length > 0 && (
                         <div>
-                          <h5 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 mb-1"><AlertTriangle className="w-3 h-3"/> {t('diagnoses')}</h5>
+                          <h5 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 mb-1"><AlertTriangle className="w-3 h-3"/> {t('complete.diagnoses')}</h5>
                           <div className="flex flex-wrap gap-1">
                             {diags.map((d: any, j: number) => <span key={j} className="text-xs font-semibold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">{d?.condition_name || d}</span>)}
                           </div>
@@ -295,12 +307,12 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
                       
                       {labs.length > 0 && (
                         <div>
-                          <h5 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 mb-1"><TestTube className="w-3 h-3"/> {t('lab_results')}</h5>
+                          <h5 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 mb-1"><TestTube className="w-3 h-3"/> {t('complete.lab_results')}</h5>
                           <ul className="space-y-1">
                             {labs.map((l: any, j: number) => (
                               <li key={j} className="text-xs font-medium text-slate-700 flex justify-between bg-white px-2 py-1 border border-slate-100 rounded">
                                 <span>{l?.test_name || l}</span>
-                                {l?.value && <span className="font-bold">{l.value} {l.unit} {l.is_abnormal && <span className="text-red-500 ml-1">({t('abnormal')})</span>}</span>}
+                                {l?.value && <span className="font-bold">{l.value} {l.unit} {l.is_abnormal && <span className="text-red-500 ml-1">({t('complete.abnormal')})</span>}</span>}
                               </li>
                             ))}
                           </ul>
@@ -325,7 +337,7 @@ export function Screen8_Complete({ language, onReset, patientRecord, sessionId }
         ) : (
           <Send className="w-7 h-7" />
         )}
-        {isSending ? t('transmitting') : t('send_to_doctor')}
+        {isSending ? t('complete.transmitting') : t('complete.send_to_doctor')}
       </LiquidButton>
     </motion.div>
   );

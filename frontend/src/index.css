@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700;800;900&family=Noto+Sans:wght@300;400;500;600;700&family=Inter:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
 
 @theme {
@@ -13,6 +13,24 @@
   --color-surface-elevated: #f8fafc;
   --color-kiosk-bg: #0f172a;
   --color-kiosk-card: #1e293b;
+  
+  --font-heading: 'Figtree', sans-serif;
+  --font-body: 'Noto Sans', sans-serif;
+  --font-sans: 'Inter', sans-serif;
+}
+
+@utility shadow-soft-1 {
+  box-shadow: -5px -5px 15px rgba(255,255,255,0.03), 5px 5px 15px rgba(0,0,0,0.4);
+}
+
+@utility shadow-soft-2 {
+  box-shadow: inset -5px -5px 15px rgba(255,255,255,0.03), inset 5px 5px 15px rgba(0,0,0,0.4);
+}
+
+@utility glass-panel {
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
 }
 
 
@@ -28,7 +46,7 @@ html {
 }
 
 :root {
-  font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  font-family: 'Noto Sans', system-ui, -apple-system, sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #1e293b;

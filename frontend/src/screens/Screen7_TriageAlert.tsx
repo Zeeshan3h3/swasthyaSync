@@ -44,7 +44,7 @@ export function Screen7_TriageAlert({ onResume, onNewPatient }: Props) {
         Priority Assistance Required
       </h2>
       
-      <p className="relative z-10 text-xl text-red-900/80 font-medium mb-12 max-w-2xl bg-white/50 backdrop-blur-sm p-6 rounded-3xl border border-red-100">
+      <p className="relative z-10 text-xl text-red-900/80 font-medium mb-12 max-w-2xl bg-white/50 backdrop-blur-sm p-6 rounded-3xl shadow-soft-2 border-none">
         Based on your symptoms, we are moving you to the 
         <strong className="text-red-700 ml-1">Priority Triage Queue</strong>. 
         A nurse has been alerted and will see you immediately.
@@ -53,7 +53,7 @@ export function Screen7_TriageAlert({ onResume, onNewPatient }: Props) {
       <div className="relative z-10 flex flex-col sm:flex-row gap-4">
         <LiquidButton
           onClick={onResume}
-          className="group overflow-hidden bg-white text-red-700 border-2 border-red-200 px-10 py-5 rounded-full font-bold shadow-lg hover:bg-red-50 transition-all active:scale-95 text-lg flex items-center gap-3"
+          className="group overflow-hidden bg-white text-red-700 border-none px-10 py-5 rounded-full font-bold shadow-soft-1 hover:shadow-soft-2 hover:bg-red-50 transition-all active:scale-95 text-lg flex items-center gap-3"
         >
           <span className="relative z-10">I Understand, Continue</span>
         </LiquidButton>

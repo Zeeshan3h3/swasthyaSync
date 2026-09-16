@@ -12,10 +12,10 @@ interface Props {
   onBack: () => void;
 }
 
-import { useTranslations } from '../translations';
+import { useTranslation } from '../hooks/useTranslation';
 
-export function Screen6_DigitizationVerification({ patientRecord, sessionId, language = 'en-IN', onNext, onBack }: Props) {
-  const { t } = useTranslations(language);
+export function Screen6_DigitizationVerification({ patientRecord, sessionId, onNext, onBack }: Props) {
+  const { t } = useTranslation();
   const [isConfirming, setIsConfirming] = useState(false);
   const BACKEND_URL = getApiBaseUrl();
 
@@ -55,15 +55,15 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
           <div className="bg-slate-100 p-6 rounded-full mb-6">
             <FileCheck className="w-16 h-16 text-slate-400" />
           </div>
-          <h2 className="text-3xl font-extrabold text-slate-900 mb-4">{t('no_documents_uploaded')}</h2>
+          <h2 className="text-3xl font-extrabold text-slate-900 mb-4">{t('verify.no_documents_uploaded')}</h2>
           <p className="text-slate-500 text-lg mb-8 max-w-md">
-            {t('no_docs_desc')}
+            {t('verify.no_docs_desc')}
           </p>
           <LiquidButton
             onClick={onNext}
             className="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-4 rounded-full font-bold shadow-xl transition-all active:scale-95 text-lg"
           >
-            {t('continue')}
+            {t('verify.continue')}
           </LiquidButton>
         </div>
       ) : (
@@ -73,8 +73,8 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
               <FileCheck className="w-8 h-8 text-emerald-600" />
             </div>
             <div>
-              <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">{t('scan_complete')}</h2>
-              <p className="text-slate-500 font-medium text-xl">{t('scan_desc')}</p>
+              <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">{t('verify.scan_complete')}</h2>
+              <p className="text-slate-500 font-medium text-xl">{t('verify.scan_desc')}</p>
             </div>
           </div>
 
@@ -224,7 +224,7 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
           disabled={isConfirming}
           className="px-8 py-5 rounded-full font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all text-lg w-1/3"
         >
-          {t('rescan')}
+          {t('verify.rescan')}
         </LiquidButton>
         <LiquidButton
           onClick={handleConfirm}
@@ -234,13 +234,13 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, lan
            {isConfirming ? (
              <span className="relative z-10 flex items-center gap-2">
                <CheckCircle className="w-5 h-5 animate-pulse" />
-               {t('confirmed')}
+               {t('verify.confirmed')}
              </span>
            ) : (
              <>
                 <div className="absolute inset-0 w-full h-full bg-white/20 translate-y-full group-hover:translate-y-0 transition-transform duration-300 ease-out" />
                 <span className="relative z-10 flex items-center gap-2">
-                  {t('looks_good')}
+                  {t('verify.looks_good')}
                   <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
                 </span>
              </>

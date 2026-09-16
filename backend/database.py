@@ -20,6 +20,11 @@ async def init_db_pool():
         logger.error("SUPABASE_DB_URL is missing. DB won't work.")
         return
     _pool = await asyncpg.create_pool(db_url, min_size=1, max_size=5)
+    async with _pool.acquire() as conn:
+        try:
+            await conn.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS vitals TEXT")
+        except Exception as e:
+            logger.warning(f"Could not add vitals column: {e}")
     logger.info("Database pool initialized.")
 
 async def close_db_pool():
@@ -100,15 +105,28 @@ async def start_kiosk_session(patient_data: dict, department: str = "General Med
         patient_id = patient_data.get("patient_id")
         
         if not patient_id:
-            patient_id = f"pat_{uuid.uuid4().hex[:8]}"
+            abha_id = patient_data.get("abha_id")
+            if abha_id:
+                existing = await conn.fetchrow("SELECT patient_id FROM patients WHERE abha_id = $1", abha_id)
+                if existing:
+                    patient_id = existing["patient_id"]
+                else:
+                    patient_id = abha_id
+            else:
+                patient_id = f"pat_{uuid.uuid4().hex[:8]}"
             await conn.execute("""
-                INSERT INTO patients (patient_id, full_name, phone_number, age, gender, date_of_birth, weight, height, address, abha_id)
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-                ON CONFLICT DO NOTHING
+                INSERT INTO patients (patient_id, full_name, phone_number, age, gender, date_of_birth, weight, height, address, abha_id, vitals)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                ON CONFLICT (patient_id) DO UPDATE SET
+                    weight = COALESCE(EXCLUDED.weight, patients.weight),
+                    height = COALESCE(EXCLUDED.height, patients.height),
+                    vitals = COALESCE(EXCLUDED.vitals, patients.vitals),
+                    address = COALESCE(EXCLUDED.address, patients.address)
             """, 
                 patient_id, patient_data.get("full_name"), patient_data.get("phone_number"),
                 patient_data.get("age"), patient_data.get("gender"), patient_data.get("date_of_birth"),
-                patient_data.get("weight"), patient_data.get("height"), patient_data.get("address"), patient_data.get("abha_id")
+                patient_data.get("weight"), patient_data.get("height"), patient_data.get("address"), 
+                patient_data.get("abha_id"), patient_data.get("vitals")
             )
             
         token_number = None
@@ -120,12 +138,13 @@ async def start_kiosk_session(patient_data: dict, department: str = "General Med
             
         # GUARANTEE NO TOKEN DUPLICATION (Active Session Lock) applies universally
         existing_session = await conn.fetchrow("""
-            SELECT ps.token_number, ps.token_id 
+            SELECT ps.token_number, ps.token_id, ps.department, d.full_name as doctor_name
             FROM patient_sessions ps
             JOIN patients p ON ps.patient_id = p.patient_id
+            LEFT JOIN doctors d ON ps.doctor_id = d.doctor_id
             WHERE (
                 ps.patient_id = $1 
-                OR (p.phone_number = $2 AND LOWER(p.full_name) = LOWER($3))
+                OR ($2::text IS NOT NULL AND p.phone_number = $2::text AND LOWER(p.full_name) = LOWER($3::text))
             )
               AND (ps.created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
               AND ps.session_status IN ('IN_PROGRESS', 'WAITING')
@@ -133,7 +152,9 @@ async def start_kiosk_session(patient_data: dict, department: str = "General Med
         if existing_session:
             return {
                 "conflict": True,
-                "existing_token": existing_session["token_number"] or existing_session["token_id"]
+                "existing_token": existing_session["token_number"] or existing_session["token_id"],
+                "doctor_name": existing_session["doctor_name"],
+                "department": existing_session["department"]
             }
             
         # Global daily footfall count
@@ -363,11 +384,13 @@ async def get_doctors() -> list[dict]:
         return [dict(r) for r in records]
 
 async def add_doctor(full_name: str, dept_id: int, license_number: str, max_daily_patients: int = 40, profile_image_url: str = None, room_number: str = "TBD", username: str = None, password: str = None):
+    import uuid
+    doctor_id = str(uuid.uuid4())
     if not _pool: return
     async with _pool.acquire() as conn:
         await conn.execute(
-            "INSERT INTO doctors (full_name, dept_id, license_number, max_daily_patients, profile_image_url, room_number, username, password) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)",
-            full_name, dept_id, license_number, max_daily_patients, profile_image_url, room_number, username, password
+            "INSERT INTO doctors (doctor_id, full_name, dept_id, license_number, max_daily_patients, profile_image_url, room_number, username, password) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)",
+            doctor_id, full_name, dept_id, license_number, max_daily_patients, profile_image_url, room_number, username, password
         )
 
 async def update_doctor(doctor_id: str, full_name: str, dept_id: int, license_number: str, max_daily_patients: int, status: str, room_number: str, profile_image_url: str = None, username: str = None, password: str = None, current_status: str = 'Available'):

@@ -10,7 +10,7 @@ import { useState, useRef, useCallback, useEffect } from 'react';
 import { getApiBaseUrl } from '../config';
 
 interface UseSarvamTTSReturn {
-  speak: (text: string, language: string) => Promise<void>;
+  speak: (text: string, language: string, loopCount?: number) => Promise<void>;
   stop: () => void;
   isSpeaking: boolean;
   error: string | null;
@@ -50,7 +50,7 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
     };
   }, [stop]);
 
-  const speak = useCallback(async (text: string, language: string) => {
+  const speak = useCallback(async (text: string, language: string, loopCount: number = 1) => {
     if (!text?.trim()) return;
 
     stop(); // Stop any currently playing audio and abort in-flight requests
@@ -58,6 +58,33 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
 
     const abortController = new AbortController();
     abortControllerRef.current = abortController;
+
+    const playFallback = () => {
+        if ('speechSynthesis' in window) {
+          window.speechSynthesis.cancel();
+          const utterance = new SpeechSynthesisUtterance(text);
+          utterance.lang = language || 'hi-IN';
+          utterance.onstart = () => setIsSpeaking(true);
+          
+          let fallbackLoops = loopCount;
+          utterance.onend = () => {
+             if (fallbackLoops > 1) {
+                fallbackLoops--;
+                setTimeout(() => {
+                  if (abortControllerRef.current === abortController && !abortController.signal.aborted) {
+                     window.speechSynthesis.speak(utterance);
+                  }
+                }, 1500); // 1.5s gap
+             } else {
+                setIsSpeaking(false);
+             }
+          };
+          utterance.onerror = () => setIsSpeaking(false);
+          window.speechSynthesis.speak(utterance);
+          return true;
+        }
+        return false;
+    };
 
     try {
       const formData = new FormData();
@@ -72,16 +99,7 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
 
       if (!response.ok) {
         // Fallback to native Web Speech API if Sarvam is out of credits (402) or offline
-        if ('speechSynthesis' in window) {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = language || 'hi-IN';
-          utterance.onstart = () => setIsSpeaking(true);
-          utterance.onend = () => setIsSpeaking(false);
-          utterance.onerror = () => setIsSpeaking(false);
-          window.speechSynthesis.speak(utterance);
-          return;
-        }
+        if (playFallback()) return;
         throw new Error(`TTS failed: ${response.status}`);
       }
 
@@ -96,11 +114,24 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
       const audio = new Audio(blobUrl);
       audioRef.current = audio;
 
+      let loopsRemaining = loopCount;
+
       audio.onplay = () => setIsSpeaking(true);
       audio.onended = () => {
-        setIsSpeaking(false);
-        URL.revokeObjectURL(blobUrl);
-        blobUrlRef.current = null;
+        if (loopsRemaining > 1) {
+          loopsRemaining--;
+          setTimeout(() => {
+            if (audioRef.current === audio && abortControllerRef.current === abortController && !abortController.signal.aborted) {
+              audio.play().catch(console.error);
+            }
+          }, 1500); // 1.5s gap between loops
+        } else {
+          setIsSpeaking(false);
+          URL.revokeObjectURL(blobUrl);
+          if (blobUrlRef.current === blobUrl) {
+            blobUrlRef.current = null;
+          }
+        }
       };
       audio.onerror = () => {
         setIsSpeaking(false);
@@ -113,19 +144,10 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
         // Ignored, we aborted the request on purpose
         return;
       }
-      if ('speechSynthesis' in window) {
-        try {
-          window.speechSynthesis.cancel();
-          const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = language || 'hi-IN';
-          utterance.onstart = () => setIsSpeaking(true);
-          utterance.onend = () => setIsSpeaking(false);
-          utterance.onerror = () => setIsSpeaking(false);
-          window.speechSynthesis.speak(utterance);
-          return;
-        } catch (e) {
-          console.error('WebSpeech fallback failed', e);
-        }
+      try {
+        if (playFallback()) return;
+      } catch (e) {
+        console.error('WebSpeech fallback failed', e);
       }
       const msg = err instanceof Error ? err.message : 'TTS request failed';
       setError(msg);

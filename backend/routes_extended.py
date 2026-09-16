@@ -22,6 +22,247 @@ logger = logging.getLogger(__name__)
 
 extended_router = APIRouter()
 
+# ─────────────────────────────────────────────────────────────────────
+# ABDM M1 — In-Memory OTP Store
+# Not persisted. TTL-based. Single-use tokens.
+# Format: { txn_id: { otp, profile_or_phone, expires_at, path, attempts } }
+# ─────────────────────────────────────────────────────────────────────
+import time as _time
+import random as _random
+
+abdm_otp_store: dict[str, dict] = {}
+OTP_TTL_SECONDS = 300     # 5 minutes
+OTP_MAX_ATTEMPTS = 3
+
+
+def send_real_sms_otp(phone_number: str, otp: str) -> None:
+    """
+    ════════════════════════════════════════════════════════════
+    PLACEHOLDER — INJECT FREE SMS GATEWAY CREDENTIALS HERE
+    ════════════════════════════════════════════════════════════
+
+    Option 1 — Fast2SMS (free tier, ~100 SMS/day):
+        import requests
+        requests.get("https://www.fast2sms.com/dev/bulkV2", params={
+            "authorization": os.getenv("FAST2SMS_API_KEY", ""),
+            "variables_values": otp,
+            "route": "otp",
+            "numbers": phone_number,
+        })
+
+    Option 2 — Twilio (trial, 15 USD credit):
+        from twilio.rest import Client
+        client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
+        client.messages.create(
+            body=f"SwasthyaSync OTP: {otp}. Valid 5 min. DPDP Act 2023 compliant.",
+            from_=os.getenv("TWILIO_FROM_NUMBER"),
+            to=f"+91{phone_number}",
+        )
+
+    Option 3 — TextLocal (free 10 SMS trial):
+        import requests
+        requests.post("https://api.textlocal.in/send/", data={
+            "apikey": os.getenv("TEXTLOCAL_API_KEY", ""),
+            "numbers": f"91{phone_number}",
+            "message": f"SwasthyaSync OTP: {otp}. Valid 5 minutes.",
+            "sender": "SWASTH",
+        })
+
+    Add credentials to .env:
+        FAST2SMS_API_KEY=your_key_here
+        TWILIO_ACCOUNT_SID=...  TWILIO_AUTH_TOKEN=...  TWILIO_FROM_NUMBER=...
+        TEXTLOCAL_API_KEY=...
+    ════════════════════════════════════════════════════════════
+    """
+    # DEV MODE: Print to terminal so you can test without SMS credits
+    print(f"\n{'='*55}")
+    print(f"  [ABDM OTP]  Phone: +91{phone_number}  →  OTP: {otp}")
+    print(f"{'='*55}\n")
+
+
+def _mask_phone(phone: str) -> str:
+    """Returns 'XXXXXX1234' style masked phone for display."""
+    clean = phone.replace("+91", "").replace(" ", "").strip()
+    if len(clean) <= 4:
+        return "X" * len(clean)
+    return "X" * (len(clean) - 4) + clean[-4:]
+
+
+# ── ABDM Pydantic Models ──────────────────────────────────────────────
+
+class AbdmInitReq(BaseModel):
+    abha_number: str
+
+class AbdmConfirmReq(BaseModel):
+    transaction_id: str
+    otp: str
+
+class MobileOtpInitReq(BaseModel):
+    phone: str
+
+class MobileOtpConfirmReq(BaseModel):
+    transaction_id: str
+    otp: str
+
+
+# ── ABDM M1 Endpoints ─────────────────────────────────────────────────
+
+@extended_router.post("/api/abdm/auth/init")
+async def abdm_init(req: AbdmInitReq):
+    """
+    Path A Step 1: Patient enters their ABHA address.
+    Looks up the MOCK_ABHA_REGISTRY, generates OTP, sends SMS.
+    Returns transaction_id + masked phone hint.
+    """
+    from abdm_utils import lookup_by_abha_number
+    profile = lookup_by_abha_number(req.abha_number)
+    if not profile:
+        raise HTTPException(404, detail={
+            "code": "ABHA_NOT_FOUND",
+            "message": "ABHA Number not registered. Please use mobile number login.",
+        })
+
+    otp = str(_random.randint(100000, 999999))
+    txn_id = uuid.uuid4().hex
+
+    abdm_otp_store[txn_id] = {
+        "otp": otp,
+        "profile": profile,
+        "expires_at": _time.time() + OTP_TTL_SECONDS,
+        "path": "A",
+        "attempts": 0,
+    }
+
+    send_real_sms_otp(profile["mobile"], otp)
+    logger.info(f"[ABDM/A] OTP issued for {req.abha_number} → txn={txn_id}")
+
+    return {
+        "transaction_id": txn_id,
+        "phone_hint": _mask_phone(profile["mobile"]),
+        "message": "OTP sent to registered mobile",
+    }
+
+
+@extended_router.post("/api/abdm/auth/confirm")
+async def abdm_confirm(req: AbdmConfirmReq):
+    """
+    Path A Step 2: Patient enters OTP.
+    Validates it, returns the full normalized ABHA profile on success.
+    Profile contains pfp_index (1-4) for frontend picture assignment.
+    """
+    entry = abdm_otp_store.get(req.transaction_id)
+    if not entry or entry.get("path") != "A":
+        raise HTTPException(404, detail={"code": "TXN_NOT_FOUND", "message": "OTP expired or invalid transaction."})
+
+    if _time.time() > entry["expires_at"]:
+        abdm_otp_store.pop(req.transaction_id, None)
+        raise HTTPException(410, detail={"code": "OTP_EXPIRED", "message": "OTP has expired. Please request a new one."})
+
+    entry["attempts"] += 1
+    if entry["otp"] != req.otp:
+        remaining = OTP_MAX_ATTEMPTS - entry["attempts"]
+        if remaining <= 0:
+            abdm_otp_store.pop(req.transaction_id, None)
+            raise HTTPException(429, detail={"code": "MAX_ATTEMPTS", "message": "Too many incorrect attempts. Please restart."})
+        raise HTTPException(401, detail={
+            "code": "INVALID_OTP",
+            "message": f"Incorrect OTP. {remaining} attempt(s) remaining.",
+            "attempts_remaining": remaining,
+        })
+
+    profile = entry["profile"]
+    abdm_otp_store.pop(req.transaction_id, None)   # Single-use: delete immediately
+    logger.info(f"[ABDM/A] OTP confirmed. Profile: {profile['name']} | pfp={profile['pfp_index']}")
+
+    return {
+        "status": "success",
+        "profile": profile,
+    }
+
+
+@extended_router.post("/api/abdm/auth/mobile/init")
+async def mobile_otp_init(req: MobileOtpInitReq):
+    """
+    Path B Step 1: Walk-in patient enters their mobile number.
+    Generates OTP and sends SMS.
+    Returns transaction_id + masked phone hint.
+    """
+    phone = req.phone.replace("+91", "").replace(" ", "").strip()
+    if len(phone) < 10 or not phone.isdigit():
+        raise HTTPException(400, detail={"message": "Invalid phone number. Enter 10 digits."})
+
+    otp = str(_random.randint(100000, 999999))
+    txn_id = uuid.uuid4().hex
+
+    abdm_otp_store[txn_id] = {
+        "otp": otp,
+        "phone": phone,
+        "expires_at": _time.time() + OTP_TTL_SECONDS,
+        "path": "B",
+        "attempts": 0,
+    }
+
+    send_real_sms_otp(phone, otp)
+    logger.info(f"[ABDM/B] OTP issued for {_mask_phone(phone)} → txn={txn_id}")
+
+    return {
+        "transaction_id": txn_id,
+        "phone_hint": _mask_phone(phone),
+        "message": "OTP sent to your mobile",
+    }
+
+
+@extended_router.post("/api/abdm/auth/mobile/confirm")
+async def mobile_otp_confirm(req: MobileOtpConfirmReq):
+    """
+    Path B Step 2: Patient enters OTP for their mobile.
+    On success: returns verified phone + existing patients list.
+    Empty patients list → go to REGISTER.
+    Non-empty patients list → go to SELECT_MEMBER.
+    """
+    entry = abdm_otp_store.get(req.transaction_id)
+    if not entry or entry.get("path") != "B":
+        raise HTTPException(404, detail={"code": "TXN_NOT_FOUND", "message": "OTP expired or invalid transaction."})
+
+    if _time.time() > entry["expires_at"]:
+        abdm_otp_store.pop(req.transaction_id, None)
+        raise HTTPException(410, detail={"code": "OTP_EXPIRED", "message": "OTP has expired. Please request a new one."})
+
+    entry["attempts"] += 1
+    if entry["otp"] != req.otp:
+        remaining = OTP_MAX_ATTEMPTS - entry["attempts"]
+        if remaining <= 0:
+            abdm_otp_store.pop(req.transaction_id, None)
+            raise HTTPException(429, detail={"code": "MAX_ATTEMPTS", "message": "Too many incorrect attempts. Please restart."})
+        raise HTTPException(401, detail={
+            "code": "INVALID_OTP",
+            "message": f"Incorrect OTP. {remaining} attempt(s) remaining.",
+            "attempts_remaining": remaining,
+        })
+
+    phone = entry["phone"]
+    abdm_otp_store.pop(req.transaction_id, None)   # Single-use
+    logger.info(f"[ABDM/B] Phone {_mask_phone(phone)} verified.")
+
+    # Fetch existing patients linked to this phone
+    import database
+    patients = await database.get_patients_by_phone(phone)
+    for p in patients:
+        last_visit = await database.fetch_previous_history(p["patient_id"])
+        p["last_visit"] = {
+            "chief_complaint": last_visit.get("chief_complaint"),
+            "completed_at": last_visit.get("completed_at"),
+            "department": last_visit.get("department"),
+        } if last_visit else None
+
+    return {
+        "status": "success",
+        "phone": phone,
+        "patients": patients,   # [] = new patient, [...] = family selection
+    }
+
+
+
 import base64
 
 def get_logo_b64() -> str:
@@ -168,7 +409,7 @@ import database
 class StartSessionPayload(BaseModel):
     patient_id: Optional[str] = None
     full_name: Optional[str] = None
-    phone_number: str
+    phone_number: Optional[str] = None
     age: Optional[int] = None
     gender: Optional[str] = None
     date_of_birth: Optional[str] = None
@@ -220,7 +461,13 @@ async def create_session(payload: StartSessionPayload):
         doctor_id=payload.doctor_id
     )
     if db_data.get("conflict"):
-        raise HTTPException(409, {"message": "Active session exists", "existing_token": db_data.get("existing_token")})
+        return {
+            "status": "conflict",
+            "message": "Active session exists", 
+            "existing_token": db_data.get("existing_token"),
+            "doctor_name": db_data.get("doctor_name"),
+            "department": db_data.get("department")
+        }
     return {"status": "success", "session_id": db_data["session_id"], "token_id": db_data["token_id"], "token_number": db_data["token_number"], "room_number": db_data.get("room_number")}
 
 
@@ -248,8 +495,13 @@ async def get_summary_pdf(session_id: str):
         if not row:
             row = await conn.fetchrow("SELECT summary_id, pdf_file_path FROM clinical_summaries WHERE summary_id = $1", session_id)
             
-        if row and row["pdf_file_path"] and os.path.exists(row["pdf_file_path"]):
-            return FileResponse(row["pdf_file_path"], media_type="application/pdf", filename=f"{row['summary_id']}.pdf")
+        if row and row["pdf_file_path"]:
+            path = row["pdf_file_path"]
+            if path.startswith("http"):
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(path)
+            elif os.path.exists(path):
+                return FileResponse(path, media_type="application/pdf", filename=f"{row['summary_id']}.pdf")
             
         # ── On-demand PDF generation fallback ──
         try:
@@ -264,7 +516,7 @@ async def get_summary_pdf(session_id: str):
         if not p_sess:
             raise HTTPException(404, "Session not found")
             
-        p_info = await conn.fetchrow("SELECT full_name, age, gender FROM patients WHERE patient_id = $1", p_sess["patient_id"])
+        p_info = await conn.fetchrow("SELECT full_name, age, gender, abha_id, phone_number, address, weight, height, vitals FROM patients WHERE patient_id = $1", p_sess["patient_id"])
         
         try:
             from pdf_generator import generate_summary_pdf
@@ -275,20 +527,67 @@ async def get_summary_pdf(session_id: str):
             uploaded_images = []
             doc_extractions_list = []
             
+            # ── Helper: extract earliest clinical date from OCR result ──
+            def _extract_earliest_date(ocr_data: dict) -> str:
+                """
+                Drill into consolidated_summary.document_dates to find the earliest
+                clinical date. Returns ISO date string or "9999-12-31" (sorts last).
+                """
+                NO_DATE = "9999-12-31"
+                try:
+                    cs = ocr_data.get("consolidated_summary", {})
+                    if isinstance(cs, str):
+                        cs = json.loads(cs)
+                    dates = cs.get("document_dates", [])
+                    valid = [d.get("date", "") for d in dates if d.get("date")]
+                    if valid:
+                        valid.sort()
+                        return valid[0]  # earliest date
+                except Exception:
+                    pass
+                return NO_DATE
+
+            _image_date_pairs = []
             if dm:
                 filled_state_json = dm.record.filled_state
                 doc_extractions_list = [ext.model_dump() for ext in dm.record.document_extractions]
+                
+                # Build (date, image_paths) tuples for sorting
+                _image_date_pairs = []
                 for doc in dm.record.document_extractions:
-                    if getattr(doc, 'ocr_path', None):
-                        uploaded_images.extend([p.strip() for p in doc.ocr_path.split(",") if p.strip()])
+                    if not getattr(doc, 'ocr_path', None):
+                        continue
+                    paths = [p.strip() for p in doc.ocr_path.split(",") if p.strip()]
+                    # Get date from OCR entities
+                    ocr_data = doc.entities[0] if doc.entities else {}
+                    earliest = _extract_earliest_date(ocr_data)
+                    for p in paths:
+                        _image_date_pairs.append((earliest, p))
+                
+                # Sort: dated docs first (chronological), undated at the end
+                _image_date_pairs.sort(key=lambda x: x[0])
+                uploaded_images = [p for _, p in _image_date_pairs]
             else:
                 filled_state_json = json.loads(p_sess["filled_state_json"]) if p_sess.get("filled_state_json") else {}
                 db_docs = await conn.fetch("SELECT file_path, ocr_raw_json FROM uploaded_documents WHERE session_id = $1", session_id)
+                
+                # Build (date, image_paths) tuples for sorting
+                _image_date_pairs = []
                 for doc in db_docs:
                     if doc["file_path"]:
-                        uploaded_images.extend([p.strip() for p in doc["file_path"].split(",") if p.strip()])
-                    if doc["ocr_raw_json"]:
-                        doc_extractions_list.append(json.loads(doc["ocr_raw_json"]))
+                        paths = [p.strip() for p in doc["file_path"].split(",") if p.strip()]
+                    else:
+                        paths = []
+                    ocr_data = json.loads(doc["ocr_raw_json"]) if doc["ocr_raw_json"] else {}
+                    earliest = _extract_earliest_date(ocr_data)
+                    if ocr_data:
+                        doc_extractions_list.append(ocr_data)
+                    for p in paths:
+                        _image_date_pairs.append((earliest, p))
+                
+                # Sort: dated docs first (chronological), undated at the end
+                _image_date_pairs.sort(key=lambda x: x[0])
+                uploaded_images = [p for _, p in _image_date_pairs]
                         
             for ext in doc_extractions_list:
                 if "medications" in ext:
@@ -342,25 +641,32 @@ async def get_summary_pdf(session_id: str):
             context = {
                 "patient": {
                     "token": q_row["token_id"] if q_row else "",
-                    "abha_id": "Not Provided",
+                    "abha_id": p_info["abha_id"] if p_info and p_info.get("abha_id") else "Not Provided",
                     "name": p_info["full_name"] if p_info else "Unknown",
                     "gender": p_info["gender"] if p_info else "Unknown",
                     "age": str(p_info["age"]) if p_info else "Unknown",
                     "id": p_sess["patient_id"],
-                    "phone": "Not Provided",
-                    "address": "Not Provided",
+                    "phone": p_info["phone_number"] if p_info and p_info.get("phone_number") else "Not Provided",
+                    "address": p_info["address"] if p_info and p_info.get("address") else "Not Provided",
                     "visit_type": "OPD Intake"
                 },
                 "timestamp": datetime.utcnow().strftime("%d/%m/%Y %I:%M %p"),
                 "department": "General Medicine",
                 "doctor_name": "Duty Medical Officer",
                 "room_no": "OPD Room 01",
-                "vitals": {}, 
+                "vitals": {
+                    "bp": p_info["vitals"] if p_info and p_info.get("vitals") else "/", 
+                    "hr": "", 
+                    "weight": str(p_info["weight"]) if p_info and p_info.get("weight") else "", 
+                    "temp": "", 
+                    "spo2": ""
+                }, 
                 "red_flag_active": bool(q_row["priority_flag"]) if q_row else False,
                 "triage_reason": q_row["priority_reason"] if q_row else "",
                 "ai_summary": ai_summary,
                 "ocr_data": ocr_data,
                 "uploaded_images": uploaded_images,
+                "image_dates": [d for d, _ in _image_date_pairs],
                 "doctor_prescription": p_sess["doctor_prescription"] if p_sess and "doctor_prescription" in p_sess.keys() else "",
                 "logo_b64": logo_b64,
                 "hospital_name": "SwasthyaSync Healthcare",
@@ -387,11 +693,34 @@ async def get_summary_pdf(session_id: str):
                     pass
                     
             summary_id = f"sum_{uuid.uuid4().hex[:8]}"
-            pdf_dir = os.path.join(os.path.dirname(__file__), "generated_pdfs")
-            os.makedirs(pdf_dir, exist_ok=True)
-            pdf_path = os.path.join(pdf_dir, f"{summary_id}.pdf")
-            with open(pdf_path, "wb") as f:
-                f.write(pdf_bytes)
+            
+            from supabase import create_client
+            supabase_url = os.getenv("SUPABASE_URL")
+            supabase_key = os.getenv("SUPABASE_KEY")
+            pdf_path = None
+            if supabase_url and supabase_key:
+                try:
+                    supabase = create_client(supabase_url, supabase_key)
+                    storage_path = f"patient-documents/{summary_id}.pdf"
+                    supabase.storage.from_("patient-records").upload(
+                        file=pdf_bytes,
+                        path=storage_path,
+                        file_options={"content-type": "application/pdf"}
+                    )
+                    url_resp = supabase.storage.from_("patient-records").create_signed_url(storage_path, 2592000)
+                    pdf_path = url_resp.get("signedURL", storage_path)
+                except Exception as e:
+                    import logging
+                    logging.getLogger(__name__).error(f"Supabase upload error for PDF: {e}")
+            
+            if not pdf_path:
+                # Local fallback ONLY if config is missing (but we expect it to exist)
+                pdf_dir = os.path.join(os.path.dirname(__file__), "generated_pdfs")
+                os.makedirs(pdf_dir, exist_ok=True)
+                local_path = os.path.join(pdf_dir, f"{summary_id}.pdf")
+                with open(local_path, "wb") as f:
+                    f.write(pdf_bytes)
+                pdf_path = local_path
                 
             try:
                 import database
@@ -406,7 +735,11 @@ async def get_summary_pdf(session_id: str):
             except Exception as e:
                 pass
                 
-            return FileResponse(pdf_path, media_type="application/pdf", filename=f"{summary_id}.pdf")
+            if pdf_path.startswith("http"):
+                from fastapi.responses import RedirectResponse
+                return RedirectResponse(pdf_path)
+            else:
+                return FileResponse(pdf_path, media_type="application/pdf", filename=f"{summary_id}.pdf")
         except Exception as e:
             import traceback
             traceback.print_exc()
@@ -666,7 +999,7 @@ class DoctorStatusReq(BaseModel):
     status: str
 
 class DoctorNotifyReq(BaseModel):
-    doctor_id: int
+    doctor_id: str
     message: str
 
 class NurseTriageReq(BaseModel):
@@ -693,11 +1026,31 @@ async def doctor_login(req: DoctorLoginReq):
     }
 
 @extended_router.put("/api/doctor/{doctor_id}/status")
-async def update_doctor_status(doctor_id: int, req: DoctorStatusReq):
+async def update_doctor_status(doctor_id: str, req: DoctorStatusReq):
     if database._pool:
         async with database._pool.acquire() as conn:
             await conn.execute("UPDATE doctors SET current_status = $1 WHERE doctor_id = $2", req.status, doctor_id)
     return {"status": "success", "current_status": req.status}
+
+class DoctorInstructionsReq(BaseModel):
+    custom_instructions: str
+
+@extended_router.get("/api/doctor/{doctor_id}/instructions")
+async def get_doctor_instructions(doctor_id: str):
+    if database._pool:
+        async with database._pool.acquire() as conn:
+            doc = await conn.fetchrow("SELECT custom_instructions FROM doctors WHERE doctor_id = $1", doctor_id)
+            if doc:
+                return {"custom_instructions": doc["custom_instructions"] or ""}
+    return {"custom_instructions": ""}
+
+@extended_router.put("/api/doctor/{doctor_id}/instructions")
+async def update_doctor_instructions(doctor_id: str, req: DoctorInstructionsReq):
+    if database._pool:
+        async with database._pool.acquire() as conn:
+            await conn.execute("UPDATE doctors SET custom_instructions = $1 WHERE doctor_id = $2", req.custom_instructions, doctor_id)
+    return {"status": "success"}
+
 
 @extended_router.post("/api/doctor/notify")
 async def notify_admin(req: DoctorNotifyReq):

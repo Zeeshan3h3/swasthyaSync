@@ -80,7 +80,7 @@ export function Screen2_AuthConsent({ onNext, onBack, language = 'en-IN' }: Prop
             />
           </div>
           
-          <div className="sm:col-span-2 bg-white p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-xs border border-slate-200">
+          <div className="sm:col-span-2 bg-slate-50 p-4 sm:p-6 rounded-2xl sm:rounded-3xl shadow-soft-1 border-none">
             <label className="text-xs sm:text-sm font-bold text-slate-700 uppercase tracking-wider mb-3 flex items-center gap-2">
               <UserCircle className="w-4 h-4 text-blue-500" />
               {t('sex')}
@@ -90,10 +90,10 @@ export function Screen2_AuthConsent({ onNext, onBack, language = 'en-IN' }: Prop
                 <LiquidButton
                   key={s}
                   onClick={() => setSex(s.toLowerCase())}
-                  className={`py-3 sm:py-3.5 rounded-xl sm:rounded-2xl text-xs sm:text-base font-bold transition-all duration-200 border-2 cursor-pointer ${
+                  className={`py-3 sm:py-3.5 rounded-xl sm:rounded-2xl text-xs sm:text-base font-bold transition-all duration-200 border-none cursor-pointer ${
                     sex === s.toLowerCase()
-                      ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-inner'
-                      : 'border-slate-100 bg-slate-50 text-slate-600 hover:border-slate-300 hover:bg-slate-100'
+                      ? 'bg-blue-50 text-blue-700 shadow-inner'
+                      : 'bg-slate-50 text-slate-600 shadow-soft-2 hover:bg-slate-100'
                   }`}
                 >
                   {t(s.toLowerCase())}

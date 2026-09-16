@@ -16,7 +16,7 @@ import type { UIInstruction } from '../hooks/useConversation';
 import { useSarvamSTT } from '../hooks/useSarvamSTT';
 import { useSarvamTTS } from '../hooks/useSarvamTTS';
 import { motion, AnimatePresence } from 'framer-motion';
-import { useTranslations } from '../translations';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface Props {
   ui: UIInstruction;
@@ -39,7 +39,7 @@ export function Screen3_ConversationalIntake({
   onBack,
   onRedflag,
 }: Props) {
-  const { t } = useTranslations(ui.language || 'en-IN');
+  const { t } = useTranslation();
   const { speak, stop: stopTTS, isSpeaking } = useSarvamTTS();
   const [inputText, setInputText] = useState('');
   const chatEndRef = useRef<HTMLDivElement>(null);
@@ -114,13 +114,13 @@ export function Screen3_ConversationalIntake({
     >
       {/* LEFT: Chat History & Summary Panel */}
       <div className="w-full md:w-1/3 lg:w-[350px] bg-white border-b md:border-b-0 md:border-r border-slate-200 p-4 sm:p-6 flex flex-col h-[35vh] md:h-full overflow-hidden shrink-0 shadow-sm z-10">
-        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('live_summary') || 'LIVE SUMMARY'}</h3>
+        <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('interview.live_summary')}</h3>
         <div className="bg-gradient-to-br from-blue-50/50 to-indigo-50/50 p-4 rounded-xl border border-blue-100/50 shadow-sm mb-4 text-sm text-slate-700 leading-relaxed font-medium max-h-[150px] overflow-y-auto">
-          {typeof ui.section_summary === 'string' ? ui.section_summary : (ui.section_summary ? JSON.stringify(ui.section_summary) : (t('waiting_info') || 'Waiting for information...'))}
+          {typeof ui.section_summary === 'string' ? ui.section_summary : (ui.section_summary ? JSON.stringify(ui.section_summary) : t('interview.waiting_info'))}
         </div>
 
         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 pb-2 border-b border-slate-100 flex justify-between items-center">
-          <span>{t('conversation') || 'CONVERSATION'}</span>
+          <span>{t('interview.conversation')}</span>
           <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full text-[10px]">AUTO-SCROLL</span>
         </h3>
         <div className="flex-1 overflow-y-auto space-y-4 pr-2">
@@ -174,7 +174,7 @@ export function Screen3_ConversationalIntake({
             title="Simulate Red Flag for Triage Demo"
           >
             <TriangleAlert className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">{t('simulate_alert')}</span>
+            <span className="hidden sm:inline">{t('interview.simulate_alert')}</span>
           </LiquidButton>
         </div>
 
@@ -238,7 +238,7 @@ export function Screen3_ConversationalIntake({
           {isProcessing ? (
             <span className="flex flex-col items-center gap-3 text-blue-500/60 my-2">
               <Loader2 className="w-8 h-8 animate-spin" />
-              <span className="text-lg font-bold animate-pulse">{t('processing')}</span>
+              <span className="text-lg font-bold animate-pulse">{t('interview.processing')}</span>
             </span>
           ) : (
             typeof ui.prompt === 'string' ? ui.prompt : JSON.stringify(ui.prompt)
@@ -274,14 +274,16 @@ export function Screen3_ConversationalIntake({
       <div className="w-full max-w-xl flex flex-col items-center gap-4">
         {/* Text input form */}
         <form onSubmit={handleTextSubmit} className="flex w-full gap-3 relative">
-          <input 
-            type="text" 
-            value={inputText}
-            onChange={(e) => setInputText(e.target.value)}
-            disabled={isProcessing || isRecording}
-            placeholder={t('type_response')}
-            className="flex-1 rounded-full border-2 border-slate-200 bg-white px-5 py-3 text-base font-semibold text-slate-800 focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/20 disabled:opacity-50 transition-all placeholder:text-slate-400 placeholder:font-medium shadow-inner"
-          />
+          <div className="w-full flex items-center bg-white border-none rounded-full pl-6 pr-16 py-4 shadow-soft-2 focus-within:ring-4 focus-within:ring-blue-500/20 transition-all">
+            <input 
+              type="text" 
+              value={inputText}
+              onChange={(e) => setInputText(e.target.value)}
+              disabled={isProcessing || isRecording}
+              placeholder={t('interview.type_response')}
+              className="w-full bg-transparent border-none text-base font-semibold text-slate-800 focus:outline-none disabled:opacity-50 placeholder:text-slate-400 placeholder:font-medium"
+            />
+          </div>
           <LiquidButton 
             type="submit" 
             aria-label="Send message"
@@ -299,7 +301,7 @@ export function Screen3_ConversationalIntake({
             className="group flex items-center justify-center gap-1.5 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full font-bold text-slate-500 bg-slate-100 hover:bg-slate-200 hover:text-slate-700 transition-all text-xs sm:text-base cursor-pointer shrink-0"
           >
             <ArrowLeft className="w-4 h-4 sm:w-5 sm:h-5 group-hover:-translate-x-1 transition-transform" />
-            <span className="hidden xs:inline">{t('back')}</span>
+            <span className="hidden xs:inline">{t('phone.back')}</span>
           </LiquidButton>
 
           <div className="flex items-center gap-2 sm:gap-3">
@@ -339,7 +341,7 @@ export function Screen3_ConversationalIntake({
                 } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 min-w-[130px] sm:min-w-[180px]`}
               >
                 {isRecording ? <Mic className="w-4 h-4 sm:w-6 sm:h-6 animate-pulse text-red-300" /> : <Mic className="w-4 h-4 sm:w-6 sm:h-6" />}
-                <span>{isRecording ? t('release_to_send') : t('hold_to_speak')}</span>
+                <span>{isRecording ? t('interview.release_to_send') : t('interview.hold_to_speak')}</span>
               </LiquidButton>
             </div>
           </div>
@@ -353,7 +355,7 @@ export function Screen3_ConversationalIntake({
                 className="flex items-center gap-1 px-3 sm:px-6 py-2.5 sm:py-3 rounded-full font-bold text-slate-500 hover:bg-slate-100 transition-colors text-xs sm:text-base cursor-pointer"
                 title="Skip this question"
               >
-                <span className="hidden xs:inline">{t('skip')}</span>
+                <span className="hidden xs:inline">{t('docs.skip')}</span>
                 <SkipForward className="w-4 h-4 sm:w-5 sm:h-5" />
               </LiquidButton>
             )}

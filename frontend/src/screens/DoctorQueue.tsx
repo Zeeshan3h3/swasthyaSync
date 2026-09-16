@@ -1,7 +1,8 @@
 import { LiquidButton } from '../components/ui/button';
-import React, { useEffect, useState } from 'react';
+import { LogoutDialog } from '../components/LogoutDialog';
+import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Stethoscope, AlertTriangle, ArrowRight, User, LogOut, Coffee, CheckCircle } from 'lucide-react';
+import { Stethoscope, AlertTriangle, ArrowRight, User, LogOut, Coffee, CheckCircle, Settings, X } from 'lucide-react';
 import { getApiBaseUrl } from '../config';
 
 export const DoctorQueue: React.FC = () => {
@@ -10,6 +11,10 @@ export const DoctorQueue: React.FC = () => {
     const stored = localStorage.getItem('swasthya_doctor_auth');
     return stored ? JSON.parse(stored) : null;
   });
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [customInstructions, setCustomInstructions] = useState('');
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -80,6 +85,37 @@ export const DoctorQueue: React.FC = () => {
     }
   };
 
+  const openSettings = async () => {
+    setShowSettingsModal(true);
+    if (!doctorAuth) return;
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/doctor/${doctorAuth.doctor_id}/instructions`);
+      if (res.ok) {
+        const data = await res.json();
+        setCustomInstructions(data.custom_instructions || '');
+      }
+    } catch (e) {
+      console.error("Failed to load instructions", e);
+    }
+  };
+
+  const saveSettings = async () => {
+    if (!doctorAuth) return;
+    setIsSavingSettings(true);
+    try {
+      await fetch(`${getApiBaseUrl()}/api/doctor/${doctorAuth.doctor_id}/instructions`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ custom_instructions: customInstructions })
+      });
+      setShowSettingsModal(false);
+    } catch (e) {
+      console.error("Failed to save instructions", e);
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
+
   if (!doctorAuth) {
     return (
       <div className="h-screen w-full flex items-center justify-center p-8 font-sans bg-slate-50">
@@ -138,31 +174,41 @@ export const DoctorQueue: React.FC = () => {
               <p className="text-slate-500 text-sm font-medium">Room {doctorAuth.room_number} • {doctorAuth.current_status}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="flex bg-slate-100 rounded-lg border border-slate-200 p-1">
-              <LiquidButton 
-                onClick={() => handleStatusChange('Available')}
-                className={`flex items-center px-3 py-1.5 rounded-md text-sm font-bold transition ${doctorAuth.current_status === 'Available' ? 'bg-white text-emerald-600 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                <CheckCircle className="w-4 h-4 mr-1.5" /> Available
-              </LiquidButton>
-              <LiquidButton 
-                onClick={() => handleStatusChange('On Break')}
-                className={`flex items-center px-3 py-1.5 rounded-md text-sm font-bold transition ${doctorAuth.current_status === 'On Break' ? 'bg-white text-amber-600 shadow-sm border border-slate-200/60' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                <Coffee className="w-4 h-4 mr-1.5" /> Break
-              </LiquidButton>
-            </div>
-            <LiquidButton 
-              onClick={() => {
-                handleLogout();
-                navigate('/');
-              }} 
-              className="flex items-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg font-semibold transition-colors shadow-sm border border-slate-200"
+          <div className="flex gap-2 w-full md:w-auto">
+            <button
+              onClick={openSettings}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm"
             >
-              <LogOut className="w-4 h-4" />
-              Exit
-            </LiquidButton>
+              <Settings className="w-4 h-4 text-slate-500" />
+              <span>Preferences</span>
+            </button>
+            <button
+              onClick={() => handleStatusChange('Available')}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm ${
+                doctorAuth.current_status === 'Available' 
+                  ? 'bg-blue-50 text-blue-700 border-2 border-blue-200' 
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <CheckCircle className="w-4 h-4 mr-1.5" /> Available
+            </button>
+            <button
+              onClick={() => handleStatusChange('On Break')}
+              className={`flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm ${
+                doctorAuth.current_status === 'On Break' 
+                  ? 'bg-amber-50 text-amber-700 border-2 border-amber-200' 
+                  : 'bg-white text-slate-700 border border-slate-200 hover:bg-slate-50'
+              }`}
+            >
+              <Coffee className="w-4 h-4 mr-1.5" /> Break
+            </button>
+            <button
+              onClick={() => setShowLogoutDialog(true)}
+              className="flex-1 md:flex-none flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-4 py-2.5 rounded-xl font-bold transition-all shadow-sm"
+            >
+              <LogOut className="w-4 h-4 text-slate-500" />
+              <span>Exit</span>
+            </button>
           </div>
         </header>
 
@@ -207,6 +253,65 @@ export const DoctorQueue: React.FC = () => {
           )}
         </div>
       </div>
+
+      <LogoutDialog 
+        isOpen={showLogoutDialog} 
+        onClose={() => setShowLogoutDialog(false)} 
+        onConfirm={() => {
+          setShowLogoutDialog(false);
+          handleLogout();
+          navigate('/');
+        }} 
+      />
+
+      {/* Settings Modal */}
+      {showSettingsModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl w-full max-w-lg shadow-xl overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+            <div className="p-6 border-b border-slate-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-slate-900">Physician Preferences</h2>
+                <p className="text-sm text-slate-500 font-medium">Set custom instructions for the AI Kiosk</p>
+              </div>
+              <button 
+                onClick={() => setShowSettingsModal(false)}
+                className="p-2 hover:bg-slate-100 rounded-full text-slate-400 hover:text-slate-600 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="p-6">
+              <label className="block text-sm font-bold text-slate-700 mb-2">Custom Intake Prompt (Additive)</label>
+              <textarea
+                value={customInstructions}
+                onChange={e => setCustomInstructions(e.target.value)}
+                placeholder="Example: I am an orthopedic surgeon. Always ask about past sports injuries and exact pain duration."
+                className="w-full h-32 p-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-700 text-sm focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-100 transition-all font-medium resize-none"
+              />
+              <p className="text-xs text-slate-500 mt-2 font-medium">
+                These instructions will be injected into the AI interviewer when patients select you.
+              </p>
+            </div>
+            
+            <div className="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
+              <button
+                onClick={() => setShowSettingsModal(false)}
+                className="px-4 py-2 rounded-lg font-bold text-slate-600 hover:bg-slate-200 transition-colors text-sm"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={saveSettings}
+                disabled={isSavingSettings}
+                className="px-4 py-2 rounded-lg font-bold bg-blue-600 hover:bg-blue-700 text-white transition-colors text-sm disabled:opacity-50"
+              >
+                {isSavingSettings ? 'Saving...' : 'Save Preferences'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

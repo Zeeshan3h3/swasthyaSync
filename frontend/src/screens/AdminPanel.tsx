@@ -1,4 +1,5 @@
 import { LiquidButton } from '../components/ui/button';
+import { LogoutDialog } from '../components/LogoutDialog';
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -51,6 +52,7 @@ export const AdminPanel: React.FC = () => {
   const [newRule, setNewRule] = useState({ trigger_keyword: '', action_type: 'ESCALATE', action_value: '' });
   const [patientSearchQuery, setPatientSearchQuery] = useState('');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState<string>('ALL');
+  const [showLogoutDialog, setShowLogoutDialog] = useState(false);
 
   const handleLogin = (e: React.FormEvent) => {
     e.preventDefault();
@@ -238,11 +240,11 @@ export const AdminPanel: React.FC = () => {
             {authError && <div className="p-3 bg-red-100 border border-red-200 rounded-lg text-red-600 text-sm text-center">{authError}</div>}
             <div className="relative">
               <Mail className="absolute inset-y-3 left-4 h-5 w-5 text-slate-500" />
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:border-purple-200 focus:ring-1 focus:ring-[#b37feb]" placeholder="Admin Email" />
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none shadow-soft-2 rounded-xl text-slate-900 focus:ring-4 focus:ring-purple-200 transition-all" placeholder="Admin Email" />
             </div>
             <div className="relative">
               <Key className="absolute inset-y-3 left-4 h-5 w-5 text-slate-500" />
-              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-300 rounded-xl text-slate-900 focus:border-purple-200 focus:ring-1 focus:ring-[#b37feb]" placeholder="Password" />
+              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none shadow-soft-2 rounded-xl text-slate-900 focus:ring-4 focus:ring-purple-200 transition-all" placeholder="Password" />
             </div>
             <LiquidButton type="submit" className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-slate-900 font-bold rounded-xl flex justify-center items-center">Authenticate <ArrowRight className="ml-2 w-5 h-5" /></LiquidButton>
             <LiquidButton type="button" onClick={() => navigate('/')} className="w-full py-3 bg-slate-100 hover:bg-slate-700 text-slate-700 font-semibold rounded-xl">Cancel & Return</LiquidButton>
@@ -328,7 +330,7 @@ export const AdminPanel: React.FC = () => {
           <span className="text-sm font-semibold text-purple-600 bg-purple-50 px-3 py-1 rounded-full border border-purple-200/30">
             Admin: {ADMIN_EMAIL}
           </span>
-          <LiquidButton onClick={handleLogout} className="px-4 py-2 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-700 transition flex items-center">
+          <LiquidButton onClick={() => setShowLogoutDialog(true)} className="px-4 py-2 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-700 transition flex items-center">
             <LogOut className="w-4 h-4 mr-2 text-slate-500" /> Secure Logout
           </LiquidButton>
         </div>
@@ -352,7 +354,7 @@ export const AdminPanel: React.FC = () => {
 
       <div className="flex-1 flex gap-6 overflow-hidden">
         {/* Sidebar Tabs */}
-        <div className="w-64 bg-white border border-slate-200 rounded-xl p-3 flex flex-col space-y-1 overflow-y-auto">
+        <div className="w-64 bg-slate-50 shadow-soft-1 border-none rounded-2xl p-6 flex flex-col h-[calc(100vh-140px)] overflow-y-auto">
           {tabs.map(tab => (
             <LiquidButton key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center px-4 py-3 rounded-lg text-left transition ${activeTab === tab.id ? 'bg-slate-100 border-l-4 border-blue-600' : 'hover:bg-white border-l-4 border-transparent'}`}>
               <tab.icon className={`w-5 h-5 mr-3 ${tab.color}`} />
@@ -410,7 +412,7 @@ export const AdminPanel: React.FC = () => {
                   <h3 className="text-emerald-600 font-bold mb-3">Normal Queue ({normalQueues.length})</h3>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     {normalQueues.map((q, i) => (
-                      <div key={i} className="bg-white border border-slate-300 p-4 rounded-lg flex flex-col justify-between">
+                      <div key={i} className="bg-slate-50 rounded-2xl p-4 shadow-soft-1 hover:shadow-soft-2 transition-all flex flex-col justify-between">
                         <div>
                           <span className="font-bold text-slate-900 text-lg">Token: {q.token_number || q.token_id}</span>
                           <p className="text-sm text-slate-500 mt-1">Patient ID: {q.patient_id || q.full_name}</p>
@@ -961,6 +963,15 @@ export const AdminPanel: React.FC = () => {
           </div>
         </div>
       )}
+
+      <LogoutDialog 
+        isOpen={showLogoutDialog} 
+        onClose={() => setShowLogoutDialog(false)} 
+        onConfirm={() => {
+          setShowLogoutDialog(false);
+          handleLogout();
+        }} 
+      />
     </div>
   );
 };

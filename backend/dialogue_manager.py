@@ -35,9 +35,11 @@ class DialogueManager:
     """
 
     def __init__(self, clinic_mode: str = "allopathic", language: str = "en-IN"):
+        import time
         self.fsm = MacroFSM(clinic_mode=clinic_mode)
         self.record = PatientRecord(clinic_mode=clinic_mode, language=language)
         self.language = language
+        self.last_active_time = time.time()
 
     # ──────────────────────────────────────────────────────────────────
     # PUBLIC API
@@ -45,12 +47,16 @@ class DialogueManager:
 
     def start_session(self) -> dict:
         """Initialize and return the first UI instruction."""
+        import time
+        self.last_active_time = time.time()
         self.fsm.set_state("CHIEF_COMPLAINT")
         self.record.macro_state = "CHIEF_COMPLAINT"
         return self._build_ui_instruction()
 
     def set_demographics(self, name: str, age: int | None, sex: str, weight: float | None = None, height: str | None = None, vitals: str | None = None):
         """Set patient demographics (called from frontend before interview)."""
+        import time
+        self.last_active_time = time.time()
         self.record.patient_name = name
         self.record.patient_age = age
         self.record.patient_sex = sex
@@ -64,6 +70,8 @@ class DialogueManager:
 
     def set_previous_history(self, history: dict | None):
         """Inject previous encounter history for follow-up context."""
+        import time
+        self.last_active_time = time.time()
         if history:
             self.record.previous_history = history
             logger.info("Previous history injected for follow-up.")
@@ -74,6 +82,8 @@ class DialogueManager:
         input_type: "tap" | "voice" | "skip" | "back" | "next"
         value: the selected option text or voice transcript
         """
+        import time
+        self.last_active_time = time.time()
         state = self.fsm.state
 
         # ── Navigation actions ──
@@ -232,6 +242,7 @@ class DialogueManager:
             patient_age=self.record.patient_age,
             patient_sex=self.record.patient_sex,
             category=category,
+            doctor_custom_instructions=self.record.doctor_custom_instructions,
         )
         self.record.dynamic_schema = schema
 
@@ -281,6 +292,7 @@ class DialogueManager:
             filled_summary=self.record.get_filled_summary(),
             conversation_history=self.record.conversation_history,
             language=self.language,
+            doctor_custom_instructions=self.record.doctor_custom_instructions,
         )
 
         # 3. Update filled_state with extracted data
@@ -291,6 +303,27 @@ class DialogueManager:
                 entry.get("confidence", 0.8),
             )
             logger.debug(f"Filled: {fid} = {entry.get('value')}")
+
+        # 3.5 FORK CHECK: Did we just fill a fork_eligible field with a significant answer?
+        for fid, entry in extracted.items():
+            field_spec = next((f for f in schema.get("fields", []) if f["id"] == fid), None)
+            if field_spec and field_spec.get("fork_eligible", False):
+                fork_result = conversation_engine.check_and_generate_fork_questions(
+                    parent_field=field_spec,
+                    patient_answer=str(entry.get("value", "")),
+                    chief_complaint=self.record.chief_complaint.value if self.record.chief_complaint else "",
+                    language=self.language,
+                    doctor_custom_instructions=self.record.doctor_custom_instructions,
+                )
+                if fork_result:
+                    # Inject sub-fields into the live schema
+                    existing_ids = {f["id"] for f in schema["fields"]}
+                    for sub_field in fork_result:
+                        sub_id = sub_field["id"]
+                        if sub_id not in existing_ids:
+                            schema["fields"].append(sub_field)
+                            self.record.filled_state[sub_id] = {"value": None, "confidence": 0.0}
+                    logger.info(f"Fork triggered on '{fid}': injected {len(fork_result)} sub-fields")
 
         # 4. SAFETY CHECK: run deterministic rules
         safety_flags = check_safety(self.record.filled_state)
@@ -329,10 +362,11 @@ class DialogueManager:
             conversation_history=self.record.conversation_history,
             language=self.language,
             patient_message=value,
-            chief_complaint=str(self.record.chief_complaint.value or ""),
+            chief_complaint=self.record.chief_complaint.value if self.record.chief_complaint else "",
             patient_age=self.record.patient_age,
             patient_sex=self.record.patient_sex,
             previous_history=self.record.previous_history,
+            doctor_custom_instructions=self.record.doctor_custom_instructions,
         )
 
         # Store assistant's question
@@ -428,6 +462,7 @@ class DialogueManager:
                 patient_age=self.record.patient_age,
                 patient_sex=self.record.patient_sex,
                 previous_history=self.record.previous_history,
+                doctor_custom_instructions=self.record.doctor_custom_instructions,
             )
             self.record.add_conversation_message(
                 "assistant", result.spoken_text, "CHIEF_COMPLAINT"

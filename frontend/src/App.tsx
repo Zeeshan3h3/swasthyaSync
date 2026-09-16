@@ -17,6 +17,8 @@ import { DoctorQueue } from './screens/DoctorQueue';
 import { DoctorDashboard } from './screens/DoctorDashboard';
 import { AdminPanel } from './screens/AdminPanel';
 import { getApiBaseUrl } from './config';
+import { AudioGuideProvider, useAudioGuideContext } from './context/AudioGuideContext';
+import { Volume2, VolumeX, Globe } from 'lucide-react';
 
 const API_BASE_URL = getApiBaseUrl();
 
@@ -144,10 +146,40 @@ function KioskApp() {
     </div>
   );
 
+  function GlobalAudioControls() {
+    const { setLanguage, uiLang, setUiLang, isMuted, setIsMuted } = useAudioGuideContext();
+    const langCycle: Record<string, string> = { 'en': 'hi', 'hi': 'bn', 'bn': 'en' };
+    const ttsMap: Record<string, string> = { 'en': 'en-IN', 'hi': 'hi-IN', 'bn': 'bn-IN' };
+    const labelMap: Record<string, string> = { 'en': 'English', 'hi': 'हिंदी', 'bn': 'বাংলা' };
+    return (
+      <div className="fixed top-2 left-2 z-50 flex items-center gap-2">
+        <button
+          onClick={() => {
+            const next = langCycle[uiLang] || 'en';
+            setUiLang(next);
+            setLanguage(ttsMap[next] || 'en-IN');
+          }}
+          className="bg-white/80 backdrop-blur-md px-3 py-2 rounded-full shadow border border-slate-200 text-slate-700 text-sm font-bold flex items-center gap-1.5 hover:bg-white transition-colors"
+        >
+          <Globe className="w-4 h-4 text-blue-600" />
+          {labelMap[uiLang] || 'English'}
+        </button>
+        <button
+          onClick={() => setIsMuted(!isMuted)}
+          className={`bg-white/80 backdrop-blur-md p-2 rounded-full shadow border border-slate-200 text-slate-700 flex items-center justify-center hover:bg-white transition-colors ${isMuted ? 'text-red-500' : 'text-blue-600'}`}
+        >
+          {isMuted ? <VolumeX className="w-5 h-5" /> : <Volume2 className="w-5 h-5" />}
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <Layout isConnected={isConnected}>
-      {connectionBadge}
-      <RouteSynchronizer ui={ui} pendingSession={pendingSession} />
+    <AudioGuideProvider>
+      <Layout isConnected={isConnected}>
+        {connectionBadge}
+        <GlobalAudioControls />
+        <RouteSynchronizer ui={ui} pendingSession={pendingSession} />
       
       <div className="relative w-full grow flex flex-col">
         <AnimatePresence mode="wait" initial={false} custom={direction}>
@@ -333,7 +365,8 @@ function KioskApp() {
           </Routes>
         </AnimatePresence>
       </div>
-    </Layout>
+      </Layout>
+    </AudioGuideProvider>
   );
 }
 

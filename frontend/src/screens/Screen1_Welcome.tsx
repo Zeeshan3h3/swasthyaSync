@@ -4,6 +4,7 @@ import { Globe, Volume2, ArrowRight, Phone } from 'lucide-react';
 import { useSarvamTTS } from '../hooks/useSarvamTTS';
 import { motion } from 'framer-motion';
 import { getApiBaseUrl } from '../config';
+import { useTranslation } from '../hooks/useTranslation';
 
 interface Props {
   onStart: (clinicMode: string, language: string, patientData: any) => void;
@@ -44,6 +45,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
   const [phone, setPhone] = useState('');
   const [isLookingUp, setIsLookingUp] = useState(false);
   const { speak, isSpeaking } = useSarvamTTS();
+  const { t } = useTranslation();
 
   // Auto-greet in selected language when language changes
   useEffect(() => {
@@ -104,7 +106,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
           SwasthyaSync
         </h1>
         <p className="text-sm sm:text-xl text-slate-500 mb-3 sm:mb-4 max-w-2xl font-medium leading-relaxed px-2">
-          {GREETINGS[selectedLang] || 'Your health, our priority'}
+          {GREETINGS[selectedLang] || t('welcome.subtitle')}
         </p>
       </motion.div>
 
@@ -118,7 +120,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
         {/* Language Selection */}
         <p className="text-[11px] sm:text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-1.5">
           <Globe className="w-3.5 h-3.5 text-blue-500" />
-          Select Language / भाषा चुनें
+          {t('welcome.select_language')}
         </p>
         
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 sm:gap-3 w-full mb-5">
@@ -163,7 +165,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
           <div className="w-full bg-slate-50/50 p-3.5 sm:p-4 rounded-xl sm:rounded-2xl shadow-inner border border-slate-200 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 transition-all duration-300 mb-4 sm:mb-6 group cursor-text">
             <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-1.5 flex items-center justify-center gap-1.5 group-focus-within:text-blue-600 transition-colors">
               <Phone className="w-3 h-3" />
-              Enter Mobile Number
+              {t('welcome.enter_mobile')}
             </label>
             <input
               type="tel"
@@ -181,7 +183,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
             className="group relative w-full overflow-hidden bg-slate-900 hover:bg-slate-800 disabled:bg-slate-100 disabled:text-slate-400 text-white rounded-full py-3.5 sm:py-4 font-extrabold shadow-lg shadow-slate-900/20 transition-all transform hover:-translate-y-0.5 active:scale-95 text-base sm:text-lg flex items-center justify-center gap-3 cursor-pointer border border-transparent disabled:border-slate-200"
           >
             <span className="relative z-10 flex items-center gap-2">
-              {isLookingUp ? 'Looking up...' : !isConnected ? 'Connecting...' : 'Start Check-In'}
+              {isLookingUp ? t('welcome.looking_up') : !isConnected ? t('welcome.connecting') : t('welcome.start_checkin')}
               {isConnected && !isLookingUp && <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1.5 transition-transform" />}
             </span>
           </LiquidButton>
@@ -194,7 +196,7 @@ export function Screen1_Welcome({ onStart, isConnected }: Props) {
           className="mt-3 sm:mt-4 flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold transition-colors bg-slate-100 hover:bg-slate-200 px-4 sm:px-5 py-1.5 sm:py-2 rounded-full text-xs cursor-pointer"
         >
           <Volume2 className={`w-3.5 h-3.5 sm:w-4 sm:h-4 ${isSpeaking ? 'text-blue-500 animate-pulse' : ''}`} />
-          {isSpeaking ? 'Speaking...' : 'Tap to hear instruction'}
+          {isSpeaking ? t('welcome.speaking') : t('welcome.tap_to_hear')}
         </LiquidButton>
       </motion.div>
     </motion.div>

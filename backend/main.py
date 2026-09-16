@@ -54,6 +54,24 @@ logger = logging.getLogger(__name__)
 # In-memory session store (for hackathon; would be Redis/DB in production)
 sessions: dict[str, DialogueManager] = {}
 
+async def cleanup_stale_sessions():
+    """Background task to remove sessions inactive for > 30 mins."""
+    import time
+    while True:
+        try:
+            await asyncio.sleep(60)  # Check every minute
+            now = time.time()
+            stale_keys = [
+                sid for sid, dm in sessions.items()
+                if (now - getattr(dm, 'last_active_time', now)) > 1800
+            ]
+            for sid in stale_keys:
+                logger.info(f"Purging stale session: {sid}")
+                sessions.pop(sid, None)
+        except asyncio.CancelledError:
+            break
+        except Exception as e:
+            logger.error(f"Error in cleanup task: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -66,8 +84,17 @@ async def lifespan(app: FastAPI):
         logger.info("PDFEngine started.")
     except Exception as e:
         logger.error(f"Failed to start PDFEngine: {e}")
+        
+    cleanup_task = asyncio.create_task(cleanup_stale_sessions())
+    
     yield
+    
     logger.info("SwasthyaSync backend shutting down.")
+    cleanup_task.cancel()
+    try:
+        await cleanup_task
+    except asyncio.CancelledError:
+        pass
     try:
         await pdf_engine.stop()
         logger.info("PDFEngine stopped.")
@@ -137,36 +164,28 @@ async def upload_document(
     
     from supabase import create_client
     import uuid
-    os.makedirs("uploads", exist_ok=True)
     safe_filename = f"{uuid.uuid4().hex[:8]}_{file.filename or 'doc.jpg'}"
     
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_KEY")
-    storage_path = "vision_ai"
 
-    if supabase_url and supabase_key:
-        supabase = create_client(supabase_url, supabase_key)
-        storage_path = f"patient-documents/{safe_filename}"
-        try:
-            supabase.storage.from_("patient-records").upload(
-                file=image_bytes,
-                path=storage_path,
-                file_options={"content-type": content_type}
-            )
-            url_resp = supabase.storage.from_("patient-records").create_signed_url(storage_path, 604800)
-            storage_path = url_resp.get("signedURL", storage_path)
-        except Exception as e:
-            logger.error(f"Supabase upload error: {e}")
-            # fallback to local
-            file_path = os.path.join("uploads", safe_filename)
-            with open(file_path, "wb") as f:
-                f.write(image_bytes)
-            storage_path = f"/uploads/{safe_filename}"
-    else:
-        file_path = os.path.join("uploads", safe_filename)
-        with open(file_path, "wb") as f:
-            f.write(image_bytes)
-        storage_path = f"/uploads/{safe_filename}"
+    if not (supabase_url and supabase_key):
+        raise HTTPException(status_code=500, detail="Supabase configuration is missing.")
+
+    supabase = create_client(supabase_url, supabase_key)
+    storage_path = f"patient-documents/{safe_filename}"
+    try:
+        supabase.storage.from_("patient-records").upload(
+            file=image_bytes,
+            path=storage_path,
+            file_options={"content-type": content_type}
+        )
+        url_resp = supabase.storage.from_("patient-records").create_signed_url(storage_path, 2592000)
+        storage_path = url_resp.get("signedURL", storage_path)
+    except Exception as e:
+        logger.error(f"Supabase upload error: {e}")
+        raise HTTPException(status_code=500, detail="Failed to upload document to cloud storage.")
+        
     result = await process_document(image_bytes, filename=file.filename or "doc.jpg", media_type=content_type)
     result["image_url"] = storage_path
 
@@ -221,11 +240,13 @@ async def upload_document_batch(
     
     from supabase import create_client
     import uuid
-    import os
     
     supabase_url = os.getenv("SUPABASE_URL")
     supabase_key = os.getenv("SUPABASE_KEY")
-    supabase = create_client(supabase_url, supabase_key) if supabase_url and supabase_key else None
+    if not (supabase_url and supabase_key):
+        raise HTTPException(status_code=500, detail="Supabase configuration is missing.")
+        
+    supabase = create_client(supabase_url, supabase_key)
     
     for file in files:
         img_bytes = await file.read()
@@ -234,19 +255,16 @@ async def upload_document_batch(
         media_types.append(ctype)
         
         safe_filename = f"{uuid.uuid4().hex[:8]}_{file.filename or 'doc.jpg'}"
-        if supabase:
-            storage_path = f"patient-documents/{safe_filename}"
-            try:
-                supabase.storage.from_("patient-records").upload(
-                    file=img_bytes, path=storage_path, file_options={"content-type": ctype}
-                )
-                url_resp = supabase.storage.from_("patient-records").create_signed_url(storage_path, 604800)
-                storage_paths.append(url_resp.get("signedURL", storage_path))
-            except Exception as e:
-                logger.error(f"Supabase upload error: {e}")
-                storage_paths.append(f"local_upload_{safe_filename}")
-        else:
-            storage_paths.append(f"local_upload_{safe_filename}")
+        storage_path = f"patient-documents/{safe_filename}"
+        try:
+            supabase.storage.from_("patient-records").upload(
+                file=img_bytes, path=storage_path, file_options={"content-type": ctype}
+            )
+            url_resp = supabase.storage.from_("patient-records").create_signed_url(storage_path, 2592000)
+            storage_paths.append(url_resp.get("signedURL", storage_path))
+        except Exception as e:
+            logger.error(f"Supabase upload error: {e}")
+            raise HTTPException(status_code=500, detail="Failed to upload document to cloud storage.")
 
     from ocr_pipeline import process_batch_ocr
     result = await process_batch_ocr(image_bytes_list, media_types, patient_name)
@@ -486,6 +504,20 @@ async def websocket_session(ws: WebSocket, session_id: str = Query(None)):
                 provided_session_id = msg.get("session_id")
                 if provided_session_id:
                     dm.record.session_id = provided_session_id
+                    try:
+                        import database
+                        if database._pool:
+                            async with database._pool.acquire() as conn:
+                                doc_data = await conn.fetchrow("""
+                                    SELECT d.custom_instructions
+                                    FROM patient_sessions ps
+                                    JOIN doctors d ON ps.doctor_id = d.doctor_id
+                                    WHERE ps.session_id = $1
+                                """, provided_session_id)
+                                if doc_data and doc_data['custom_instructions']:
+                                    dm.record.doctor_custom_instructions = doc_data['custom_instructions']
+                    except Exception as e:
+                        logger.error(f"Failed to fetch doctor custom instructions: {e}")
 
                 ui = dm.start_session()
                 sessions[dm.record.session_id] = dm

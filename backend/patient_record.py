@@ -101,6 +101,7 @@ class PatientRecord(BaseModel):
 
     # ── Dynamic schema (Stage 1 output) ──
     dynamic_schema: Optional[dict] = None  # The generated schema for this encounter
+    doctor_custom_instructions: Optional[str] = None  # Custom prompt additive for the selected doctor
 
     # ── Filled state (Stage 2 source of truth) ──
     filled_state: dict[str, dict] = Field(default_factory=dict)
@@ -208,6 +209,7 @@ class PatientRecord(BaseModel):
                 "field_id": field_id,
                 "question_intent": intent,
                 "value": entry["value"],
+                "verbatim": entry.get("verbatim"),
                 "confidence": entry.get("confidence", 0.0),
             })
 
