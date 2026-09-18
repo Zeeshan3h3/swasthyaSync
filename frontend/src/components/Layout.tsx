@@ -277,7 +277,7 @@ export function Layout({ children, isConnected = true, isKioskInterview = false 
 
         <main 
           ref={scrollRef}
-          className={`flex-1 relative ${isKioskInterview ? 'overflow-hidden flex flex-col p-0 m-0' : 'overflow-y-auto overflow-x-hidden pt-24 sm:pt-28'}`}
+          className={`flex-1 relative ${isKioskInterview ? 'overflow-hidden flex flex-col p-0 m-0' : 'overflow-y-auto overflow-x-hidden pt-16 sm:pt-20'}`}
           tabIndex={-1}
         >
           <motion.div

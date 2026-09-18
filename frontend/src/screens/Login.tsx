@@ -841,7 +841,7 @@ export function Login({ onSessionStarted }: Props) {
   // RENDER
   // ─────────────────────────────────────────────────────────────────
   return (
-    <div className={`flex-1 h-full w-full flex flex-col items-center justify-center overflow-y-auto ${['CONSENT', 'WELCOME_LANGUAGE'].includes(step) ? '' : 'p-4 sm:p-6 bg-gradient-to-br from-slate-50 to-blue-50/30'}`}>
+    <div className={`flex-1 h-full w-full flex flex-col items-center ${['CONSENT', 'WELCOME_LANGUAGE'].includes(step) ? 'justify-start' : 'justify-center'} overflow-y-auto ${['CONSENT', 'WELCOME_LANGUAGE'].includes(step) ? '' : 'p-4 sm:p-6 bg-gradient-to-br from-slate-50 to-blue-50/30'}`}>
       <div className={`w-full flex flex-col items-center ${['CONSENT', 'WELCOME_LANGUAGE'].includes(step) ? 'h-full' : 'max-w-3xl'}`}>
 
         {/* Header & Step Indicator — shown on most steps */}
@@ -922,140 +922,139 @@ export function Login({ onSessionStarted }: Props) {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0, y: -20 }}
-              className="w-full h-full flex flex-col lg:flex-row"
-              style={{ minHeight: 'calc(100vh - 120px)' }}
+              className="w-full h-full flex flex-col lg:flex-row min-h-0"
             >
               {/* ════════════════════════════════════════════════════════
-                  LEFT PANEL — System Capabilities & Feature Showcase (~62%)
+                  LEFT PANEL — System Capabilities & Feature Showcase (~60%)
               ════════════════════════════════════════════════════════ */}
-              <div className="lg:w-[62%] w-full bg-transparent text-slate-900 p-6 sm:p-10 lg:p-14 flex flex-col justify-center relative overflow-hidden">
+              <div className="lg:w-[58%] xl:w-[60%] w-full bg-transparent text-slate-900 px-5 py-2 sm:px-8 sm:py-3 lg:px-10 lg:py-3 flex flex-col justify-start relative overflow-hidden">
                 {/* Decorative orbs */}
-                <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100/70 rounded-full blur-3xl pointer-events-none" />
-                <div className="absolute bottom-0 left-0 w-80 h-80 bg-emerald-50/80 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute top-0 right-0 w-80 h-80 bg-blue-100/60 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-50/70 rounded-full blur-3xl pointer-events-none" />
 
                 {/* Hospital branding & Header */}
-                <div className="relative z-10 mb-8">
-                  <div className="flex items-center gap-4 mb-3">
-                    <div className="w-14 h-14 rounded-2xl bg-white shadow-md border border-slate-100 flex items-center justify-center p-2">
+                <div className="relative z-10 mb-3">
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className="w-10 h-10 rounded-xl bg-white shadow-xs border border-slate-200/80 flex items-center justify-center p-1.5 shrink-0">
                       <img src={logoPNG} alt="SwasthyaSync Logo" className="w-full h-full object-contain" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <span className="text-[11px] text-blue-700 font-bold uppercase tracking-wider bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md">
+                        <span className="text-[10px] text-blue-700 font-bold uppercase tracking-wider bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md">
                           National Health Mission Ready
                         </span>
-                        <span className="text-[11px] text-emerald-700 font-bold uppercase tracking-wider bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
+                        <span className="text-[10px] text-emerald-700 font-bold uppercase tracking-wider bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
                           Smart OPD Kiosk
                         </span>
                       </div>
-                      <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
+                      <h1 className="text-xl sm:text-2xl font-black tracking-tight text-slate-900 leading-tight">
                         SwasthyaSync
                       </h1>
                     </div>
                   </div>
-                  <p className="text-slate-600 text-sm sm:text-base font-medium max-w-xl">
-                    Next-Generation AI Clinical Triage, Multilingual Patient Intake & Doctor EMR Synchronization System.
+                  <p className="text-slate-600 text-xs sm:text-sm font-medium">
+                    AI Clinical Triage, Multilingual Patient Intake & Doctor EMR Synchronization.
                   </p>
                 </div>
 
                 {/* Features Grid Header */}
-                <div className="relative z-10 flex items-center justify-between mb-4">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                <div className="relative z-10 flex items-center justify-between mb-2">
+                  <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                     SYSTEM FEATURES & CAPABILITIES · मुख्य विशेषताएं
                   </p>
-                  <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1">
-                    <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                  <span className="text-[10px] text-blue-600 font-semibold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3 text-blue-500" />
                     Powered by Medical AI
                   </span>
                 </div>
 
                 {/* Feature Bento Grid */}
-                <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-6">
+                <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 mb-3">
                   {SYSTEM_FEATURES.map((feat, idx) => (
                     <div
                       key={idx}
-                      className="bg-white/75 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-blue-300 transition-all duration-200 flex flex-col justify-between"
+                      className="bg-white/80 backdrop-blur-md rounded-xl p-2.5 sm:p-3 border border-slate-200/80 shadow-2xs hover:shadow-xs hover:border-blue-300 transition-all duration-150 flex flex-col justify-between"
                     >
                       <div>
-                        <div className="flex items-center justify-between mb-2">
-                          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shadow-2xs ${feat.iconBg}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <div className={`w-7 h-7 rounded-lg border flex items-center justify-center shadow-2xs ${feat.iconBg}`}>
                             {feat.icon}
                           </div>
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${feat.badgeColor}`}>
+                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${feat.badgeColor}`}>
                             {feat.badge}
                           </span>
                         </div>
-                        <h3 className="text-sm font-bold text-slate-900 leading-snug mb-1">
+                        <h3 className="text-xs sm:text-[13px] font-bold text-slate-900 leading-tight mb-0.5">
                           {feat.title}
                         </h3>
-                        <p className="text-xs text-slate-500 leading-relaxed">
+                        <p className="text-[11px] text-slate-500 leading-snug">
                           {feat.desc}
                         </p>
                       </div>
-                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
-                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
-                        <span>{feat.tag}</span>
+                      <div className="mt-2 pt-1.5 border-t border-slate-100 flex items-center gap-1.5 text-[9px] font-semibold text-slate-400">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500 shrink-0" />
+                        <span className="truncate">{feat.tag}</span>
                       </div>
                     </div>
                   ))}
                 </div>
 
                 {/* Trust and Compliance Footer */}
-                <div className="relative z-10 flex flex-wrap items-center gap-5 text-xs font-semibold text-slate-500 pt-3 border-t border-slate-200/70">
+                <div className="relative z-10 flex flex-wrap items-center gap-4 text-[11px] font-semibold text-slate-500 pt-2 border-t border-slate-200/70">
                   <div className="flex items-center gap-1.5 text-slate-600">
-                    <ShieldCheck className="w-4 h-4 text-blue-600" />
+                    <ShieldCheck className="w-3.5 h-3.5 text-blue-600" />
                     <span>DPDP Act 2023 Compliant</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-slate-600">
-                    <Fingerprint className="w-4 h-4 text-purple-600" />
+                    <Fingerprint className="w-3.5 h-3.5 text-purple-600" />
                     <span>ABDM / ABHA Integrated</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-slate-600">
-                    <Sparkles className="w-4 h-4 text-amber-500" />
-                    <span>Sarvam AI Speech Engine</span>
+                    <Sparkles className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Sarvam AI Speech</span>
                   </div>
                 </div>
               </div>
 
               {/* ════════════════════════════════════════════════════════
-                  RIGHT PANEL — Language Selection & Rotating Audio Loop (~38%)
+                  RIGHT PANEL — Language Selection & Rotating Audio Loop (~40%)
               ════════════════════════════════════════════════════════ */}
-              <div className="lg:w-[38%] w-full bg-transparent p-6 sm:p-8 lg:p-10 flex flex-col justify-center items-center">
-                <div className="max-w-md w-full bg-white/80 backdrop-blur-xl border border-white p-6 sm:p-8 rounded-3xl shadow-2xl shadow-slate-200/60 flex flex-col">
+              <div className="lg:w-[42%] xl:w-[40%] w-full bg-transparent px-4 py-2 sm:px-6 sm:py-3 lg:px-8 lg:py-3 flex flex-col justify-start items-center">
+                <div className="max-w-md w-full bg-white/85 backdrop-blur-xl border border-white p-4 sm:p-5 rounded-2xl shadow-xl shadow-slate-200/50 flex flex-col">
                   {/* Heading */}
-                  <div className="mb-6 text-center">
-                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 mb-3 relative">
-                      <Languages className="w-7 h-7" />
-                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                  <div className="mb-3 text-center">
+                    <div className="inline-flex items-center justify-center w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-md shadow-blue-500/20 mb-1.5 relative">
+                      <Languages className="w-5 h-5" />
+                      <span className="absolute -top-0.5 -right-0.5 flex h-2.5 w-2.5">
                         <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-emerald-500" />
                       </span>
                     </div>
-                    <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                    <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight leading-tight">
                       Select Kiosk Language
                     </h2>
-                    <p className="text-xs font-semibold text-blue-600 mt-1">
+                    <p className="text-[11px] font-semibold text-blue-600 mt-0.5">
                       अपनी भाषा चुनें · আপনার ভাষা নির্বাচন করুন
                     </p>
-                    <p className="text-xs text-slate-400 mt-1">
+                    <p className="text-[10px] text-slate-400 mt-0.5">
                       Touch your language to begin your registration & intake
                     </p>
                   </div>
 
                   {/* Voice Announcement Status Banner */}
-                  <div className="mb-5 p-3 rounded-2xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100 flex items-center justify-between">
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeSpeakingLang ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'}`}>
-                        <Volume2 className={`w-4 h-4 ${activeSpeakingLang ? 'animate-pulse' : ''}`} />
+                  <div className="mb-2.5 p-2 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${activeSpeakingLang ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'}`}>
+                        <Volume2 className={`w-3.5 h-3.5 ${activeSpeakingLang ? 'animate-pulse' : ''}`} />
                       </div>
                       <div className="min-w-0">
-                        <p className="text-[11px] font-bold text-slate-800 leading-tight truncate">
+                        <p className="text-[10px] font-bold text-slate-800 leading-tight truncate">
                           {activeSpeakingLang === 'en' && 'English Audio Announcement'}
                           {activeSpeakingLang === 'hi' && 'हिन्दी ऑडियो घोषणा जारी'}
                           {activeSpeakingLang === 'bn' && 'বাংলা অডিও নির্দেশিকা চলছে'}
                           {!activeSpeakingLang && 'Kiosk Audio Guide Active'}
                         </p>
-                        <p className="text-[10px] text-slate-500 truncate">
+                        <p className="text-[9px] text-slate-500 truncate">
                           Dictating in 3 languages · Loop auto-rotates
                         </p>
                       </div>
@@ -1070,14 +1069,14 @@ export function Login({ onSessionStarted }: Props) {
                           playSingleWelcome(KIOSK_LANGUAGES[0]);
                         }
                       }}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-700 bg-white/90 border border-slate-200/80 rounded-lg shrink-0 shadow-2xs hover:bg-blue-50 transition-colors"
+                      className="px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:text-blue-700 bg-white/90 border border-slate-200/80 rounded-md shrink-0 shadow-2xs hover:bg-blue-50 transition-colors"
                     >
                       {activeSpeakingLang ? 'Pause Audio' : 'Play Audio'}
                     </button>
                   </div>
 
                   {/* Language Cards */}
-                  <div className="space-y-3.5 mb-6">
+                  <div className="space-y-2 mb-2.5">
                     {KIOSK_LANGUAGES.map((lang) => {
                       const isSpeakingThis = activeSpeakingLang === lang.id;
                       return (
@@ -1088,65 +1087,65 @@ export function Login({ onSessionStarted }: Props) {
                           tabIndex={0}
                           onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectLanguage(lang.id); }}
                           className={`
-                            relative group p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 select-none
+                            relative group p-2.5 sm:p-3 rounded-xl border-2 cursor-pointer transition-all duration-150 select-none
                             ${isSpeakingThis
-                              ? `${lang.borderActive} bg-white shadow-lg scale-[1.01]`
-                              : 'border-slate-200/80 bg-white/90 hover:border-blue-400 hover:shadow-md'
+                              ? `${lang.borderActive} bg-white shadow-md scale-[1.01]`
+                              : 'border-slate-200/80 bg-white/90 hover:border-blue-400 hover:shadow-xs'
                             }
                           `}
                         >
                           <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-3.5">
-                              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${lang.accent} text-white font-black flex items-center justify-center text-lg shadow-sm shrink-0`}>
+                            <div className="flex items-center gap-3">
+                              <div className={`w-9 h-9 rounded-lg bg-gradient-to-br ${lang.accent} text-white font-black flex items-center justify-center text-sm shadow-xs shrink-0`}>
                                 {lang.id === 'en' ? 'En' : lang.id === 'hi' ? 'अ' : 'অ'}
                               </div>
                               <div>
-                                <div className="flex items-center gap-2">
-                                  <h3 className="text-base font-bold text-slate-900">{lang.native}</h3>
-                                  <span className="text-xs text-slate-500 font-medium">({lang.label})</span>
-                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                                <div className="flex items-center gap-1.5">
+                                  <h3 className="text-sm font-bold text-slate-900">{lang.native}</h3>
+                                  <span className="text-[11px] text-slate-500 font-medium">({lang.label})</span>
+                                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
                                     {lang.badge}
                                   </span>
                                 </div>
-                                <p className="text-xs text-slate-500 mt-0.5">{lang.sub}</p>
+                                <p className="text-[11px] text-slate-500 mt-0.5">{lang.sub}</p>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1.5">
                               <button
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   playSingleWelcome(lang);
                                 }}
-                                className={`p-2 rounded-xl transition-all ${
+                                className={`p-1.5 rounded-lg transition-all ${
                                   isSpeakingThis
                                     ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-300'
                                     : 'bg-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50'
                                 }`}
                                 title={`Listen in ${lang.label}`}
                               >
-                                <Volume2 className="w-4 h-4" />
+                                <Volume2 className="w-3.5 h-3.5" />
                               </button>
 
-                              <div className="w-8 h-8 rounded-full bg-slate-100 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-all">
-                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+                              <div className="w-6 h-6 rounded-full bg-slate-100 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-all">
+                                <ChevronRight className="w-3.5 h-3.5 text-slate-400 group-hover:text-white transition-colors" />
                               </div>
                             </div>
                           </div>
 
                           {/* Active speaking indicator */}
                           {isSpeakingThis && (
-                            <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-blue-700 font-medium">
-                              <span className="flex items-center gap-1.5">
-                                <span className="flex gap-0.5 items-end h-3">
-                                  <span className="w-1 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s] h-3" />
-                                  <span className="w-1 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.15s] h-1.5" />
-                                  <span className="w-1 bg-blue-600 rounded-full animate-bounce h-2.5" />
+                            <div className="mt-1.5 pt-1.5 border-t border-slate-100 flex items-center justify-between text-[10px] text-blue-700 font-medium">
+                              <span className="flex items-center gap-1">
+                                <span className="flex gap-0.5 items-end h-2.5">
+                                  <span className="w-0.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s] h-2.5" />
+                                  <span className="w-0.5 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.15s] h-1" />
+                                  <span className="w-0.5 bg-blue-600 rounded-full animate-bounce h-2" />
                                 </span>
                                 Speaking now · Touch to select
                               </span>
-                              <span className="text-[10px] text-blue-500 font-bold">START →</span>
+                              <span className="text-[9px] text-blue-500 font-bold">START →</span>
                             </div>
                           )}
                         </div>
@@ -1155,9 +1154,9 @@ export function Login({ onSessionStarted }: Props) {
                   </div>
 
                   {/* Footer Instructions */}
-                  <div className="text-center pt-2 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
-                    <p>Touch any box above to set your language and proceed to Patient Consent.</p>
-                    <p className="text-[10px] text-slate-400 mt-1">Audio guidance will match your selected language throughout the kiosk.</p>
+                  <div className="text-center pt-2 border-t border-slate-100 text-[10px] text-slate-400 leading-tight">
+                    <p>Touch any box above to proceed to Patient Consent.</p>
+                    <p className="text-[9px] text-slate-400 mt-0.5">Audio guidance will match your selected language throughout the kiosk.</p>
                   </div>
                 </div>
               </div>
