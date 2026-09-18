@@ -58,11 +58,17 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="SwasthyaSync Mobile Portal API", lifespan=lifespan)
 
-origins = os.getenv("CORS_ORIGINS", "*").split(",")
+raw_origins = os.getenv("CORS_ORIGINS", "*")
+if raw_origins.strip() == "*":
+    origins = ["*"]
+else:
+    origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
-    allow_credentials=True,
+    allow_origin_regex=r"https://.*\.vercel\.app" if "*" not in origins else None,
+    allow_credentials=True if "*" not in origins else False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
