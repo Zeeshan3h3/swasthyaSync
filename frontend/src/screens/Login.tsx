@@ -1,12 +1,13 @@
 import { LiquidButton } from '../components/ui/button';
 import { useTranslation } from '../hooks/useTranslation';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Phone, Users, UserPlus, Building2, ArrowRight, User, Calendar, Activity,
   MapPin, Globe, Shield, ShieldCheck, CheckCircle2, Fingerprint, Smartphone,
   BadgeCheck, RefreshCw, ArrowLeft, ChevronRight, AlertCircle, Loader2, UserCircle,
-  Mic, FileSearch, HeartPulse, Ticket, Volume2, VolumeX
+  Mic, FileSearch, HeartPulse, Ticket, Volume2, VolumeX, Sparkles,
+  Stethoscope, Scan, Languages
 } from 'lucide-react';
 import { getApiBaseUrl } from '../config';
 import { OtpInput } from '../components/OtpInput';
@@ -60,6 +61,7 @@ interface AbdmProfile {
 }
 
 type Step =
+  | 'WELCOME_LANGUAGE'
   | 'CONSENT'
   | 'LANDING'
   | 'ABHA_IDENTIFY'
@@ -70,6 +72,112 @@ type Step =
   | 'SELECT_MEMBER'
   | 'REGISTER'
   | 'DEPARTMENT';
+
+// ── Welcome Screen Configurations ─────────────────────────────────────
+interface WelcomeLangItem {
+  id: 'en' | 'hi' | 'bn';
+  ttsLang: 'en-IN' | 'hi-IN' | 'bn-IN';
+  label: string;
+  native: string;
+  sub: string;
+  badge: string;
+  accent: string;
+  borderActive: string;
+  welcomePrompt: string;
+}
+
+const KIOSK_LANGUAGES: WelcomeLangItem[] = [
+  {
+    id: 'en',
+    ttsLang: 'en-IN',
+    label: 'English',
+    native: 'English',
+    sub: 'Touch to proceed in English',
+    badge: 'Standard',
+    accent: 'from-blue-600 to-indigo-600',
+    borderActive: 'border-blue-500 ring-4 ring-blue-500/20 shadow-blue-500/20',
+    welcomePrompt: 'Welcome to SwasthyaSync. Please touch your preferred language on the screen to begin your clinical check-in.',
+  },
+  {
+    id: 'hi',
+    ttsLang: 'hi-IN',
+    label: 'Hindi',
+    native: 'हिन्दी',
+    sub: 'हिन्दी में जारी रखने के लिए स्पर्श करें',
+    badge: 'राष्ट्रीय',
+    accent: 'from-emerald-600 to-teal-600',
+    borderActive: 'border-emerald-500 ring-4 ring-emerald-500/20 shadow-emerald-500/20',
+    welcomePrompt: 'स्वास्थ्यसिंक में आपका स्वागत है। अपनी स्वास्थ्य जांच और टोकन प्राप्त करने के लिए कृपया स्क्रीन पर अपनी भाषा चुनें।',
+  },
+  {
+    id: 'bn',
+    ttsLang: 'bn-IN',
+    label: 'Bengali',
+    native: 'বাংলা',
+    sub: 'বাংলা ভাষায় শুরু করতে স্পর্শ করুন',
+    badge: 'আঞ্চলিক',
+    accent: 'from-amber-600 to-orange-600',
+    borderActive: 'border-amber-500 ring-4 ring-amber-500/20 shadow-amber-500/20',
+    welcomePrompt: 'স্বাস্থ্যসিঙ্কে আপনাকে স্বাগতম। আপনার স্বাস্থ্য পরীক্ষা শুরু করার জন্য অনুগ্রহ করে স্ক্রিনে আপনার ভাষা স্পর্শ করুন।',
+  },
+];
+
+const SYSTEM_FEATURES = [
+  {
+    icon: <Mic className="w-5 h-5 text-blue-600" />,
+    iconBg: "bg-blue-50 border-blue-200/60",
+    badge: "10+ Dialects",
+    badgeColor: "bg-blue-50 text-blue-700 border-blue-200/50",
+    title: "Multilingual Voice AI Intake",
+    desc: "Patients converse naturally in Hindi, Bengali, or English. Advanced medical Speech AI automatically extracts symptoms, duration, and vitals.",
+    tag: "Hands-free & Senior friendly",
+  },
+  {
+    icon: <Scan className="w-5 h-5 text-indigo-600" />,
+    iconBg: "bg-indigo-50 border-indigo-200/60",
+    badge: "Smart Vision OCR",
+    badgeColor: "bg-indigo-50 text-indigo-700 border-indigo-200/50",
+    title: "Prescription & Lab OCR",
+    desc: "Simply present previous doctor prescriptions or diagnostic reports. High-speed OCR digitizes clinical history in seconds.",
+    tag: "Zero manual typing",
+  },
+  {
+    icon: <Activity className="w-5 h-5 text-rose-600" />,
+    iconBg: "bg-rose-50 border-rose-200/60",
+    badge: "Automated Triage",
+    badgeColor: "bg-rose-50 text-rose-700 border-rose-200/50",
+    title: "Clinical Algorithmic Triage",
+    desc: "Instant acuity scoring (Red/Yellow/Green) flags emergency chest pain or acute symptoms immediately to on-duty trauma staff.",
+    tag: "Emergency fast-track",
+  },
+  {
+    icon: <Stethoscope className="w-5 h-5 text-emerald-600" />,
+    iconBg: "bg-emerald-50 border-emerald-200/60",
+    badge: "EMR Ready",
+    badgeColor: "bg-emerald-50 text-emerald-700 border-emerald-200/50",
+    title: "Doctor Casesheet Handoff",
+    desc: "Converts voice interview into structured SOAP notes and differential diagnosis summary, saving 60% of doctor consultation time.",
+    tag: "Instant Doctor Portal sync",
+  },
+  {
+    icon: <Fingerprint className="w-5 h-5 text-purple-600" />,
+    iconBg: "bg-purple-50 border-purple-200/60",
+    badge: "NDHM / ABDM",
+    badgeColor: "bg-purple-50 text-purple-700 border-purple-200/50",
+    title: "ABHA 14-Digit Health ID",
+    desc: "Seamlessly link your Ayushman Bharat Health Account via biometric/OTP or check in with mobile number under DPDP Act compliance.",
+    tag: "Universal health record",
+  },
+  {
+    icon: <Smartphone className="w-5 h-5 text-cyan-600" />,
+    iconBg: "bg-cyan-50 border-cyan-200/60",
+    badge: "Patient Portal",
+    badgeColor: "bg-cyan-50 text-cyan-700 border-cyan-200/50",
+    title: "Live Queue & AI Companion",
+    desc: "Scan the on-screen QR code to carry your live OPD queue token on your smartphone and chat with our 24/7 empathetic Medical Copilot.",
+    tag: "Mobile web app included",
+  },
+];
 
 interface Props {
   onSessionStarted: (sessionData: any, patientData: Patient, language: string) => void;
@@ -146,7 +254,7 @@ export function Login({ onSessionStarted }: Props) {
   const getInitialStep = (): Step => {
     if (saved?.step === 'ABHA_OTP') return 'ABHA_IDENTIFY';
     if (saved?.step === 'MOBILE_OTP_VERIFY') return 'PHONE';
-    return saved?.step || 'CONSENT';
+    return saved?.step || 'WELCOME_LANGUAGE';
   };
 
   // ── Core state ────────────────────────────────────────────────────
@@ -188,9 +296,207 @@ export function Login({ onSessionStarted }: Props) {
   const [selectedDoctor, setSelectedDoctor] = useState(saved?.selectedDoctor || '');
   const [doctors, setDoctors] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
-  const { language, setLanguage, speak, stop, isSpeaking } = useAudioGuide();
+  const { language, setLanguage, setUiLang, speak, stop, isSpeaking } = useAudioGuide();
   const [activeConsentAudio, setActiveConsentAudio] = useState<ConsentKey | null>(null);
   const wasSpeakingRef = useRef(false);
+
+  // ── Welcome Language Screen Audio Loop ─────────────────────────────
+  const [activeSpeakingLang, setActiveSpeakingLang] = useState<'en' | 'hi' | 'bn' | null>(null);
+  const welcomeLoopAbortRef = useRef<AbortController | null>(null);
+  const welcomeAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const stopWelcomeLoop = useCallback(() => {
+    if (welcomeLoopAbortRef.current) {
+      welcomeLoopAbortRef.current.abort();
+      welcomeLoopAbortRef.current = null;
+    }
+    if (welcomeAudioRef.current) {
+      welcomeAudioRef.current.onended = null;
+      welcomeAudioRef.current.onerror = null;
+      welcomeAudioRef.current.pause();
+      welcomeAudioRef.current.src = '';
+      welcomeAudioRef.current = null;
+    }
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+    setActiveSpeakingLang(null);
+  }, []);
+
+  const playSingleWelcome = useCallback(async (item: WelcomeLangItem) => {
+    stopWelcomeLoop();
+    setActiveSpeakingLang(item.id);
+
+    try {
+      const formData = new FormData();
+      formData.append('text', item.welcomePrompt);
+      formData.append('language', item.ttsLang);
+
+      const resp = await fetch(`${getApiBaseUrl()}/api/tts`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (resp.ok) {
+        const blob = await resp.blob();
+        const blobUrl = URL.createObjectURL(blob);
+        const audio = new Audio(blobUrl);
+        welcomeAudioRef.current = audio;
+
+        audio.onended = () => {
+          URL.revokeObjectURL(blobUrl);
+          welcomeAudioRef.current = null;
+          setActiveSpeakingLang(null);
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(blobUrl);
+          welcomeAudioRef.current = null;
+          setActiveSpeakingLang(null);
+        };
+
+        await audio.play().catch(() => {
+          URL.revokeObjectURL(blobUrl);
+          welcomeAudioRef.current = null;
+          setActiveSpeakingLang(null);
+        });
+        return;
+      }
+    } catch {
+      // Continue to fallback
+    }
+
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+      const utt = new SpeechSynthesisUtterance(item.welcomePrompt);
+      utt.lang = item.ttsLang;
+      utt.rate = 0.95;
+      utt.onend = () => setActiveSpeakingLang(null);
+      utt.onerror = () => setActiveSpeakingLang(null);
+      window.speechSynthesis.speak(utt);
+    } else {
+      setActiveSpeakingLang(null);
+    }
+  }, [stopWelcomeLoop]);
+
+  const handleSelectLanguage = useCallback((langId: 'en' | 'hi' | 'bn') => {
+    stopWelcomeLoop();
+    const langItem = KIOSK_LANGUAGES.find((l) => l.id === langId);
+    if (langItem) {
+      setLanguage(langItem.ttsLang);
+      setUiLang(langItem.id);
+    }
+    setStep('CONSENT');
+  }, [stopWelcomeLoop, setLanguage, setUiLang]);
+
+  // Audio loop for WELCOME_LANGUAGE
+  useEffect(() => {
+    if (step !== 'WELCOME_LANGUAGE') {
+      stopWelcomeLoop();
+      return;
+    }
+
+    const abortController = new AbortController();
+    welcomeLoopAbortRef.current = abortController;
+    let isCancelled = false;
+
+    const playPromptAsync = (item: WelcomeLangItem): Promise<boolean> => {
+      return new Promise((resolve) => {
+        if (abortController.signal.aborted || isCancelled) return resolve(false);
+        setActiveSpeakingLang(item.id);
+
+        const cleanUp = () => {
+          if (welcomeAudioRef.current) {
+            welcomeAudioRef.current.onended = null;
+            welcomeAudioRef.current.onerror = null;
+            welcomeAudioRef.current.pause();
+            welcomeAudioRef.current.src = '';
+            welcomeAudioRef.current = null;
+          }
+          if ('speechSynthesis' in window) {
+            window.speechSynthesis.cancel();
+          }
+        };
+
+        abortController.signal.addEventListener('abort', () => {
+          cleanUp();
+          resolve(false);
+        }, { once: true });
+
+        const formData = new FormData();
+        formData.append('text', item.welcomePrompt);
+        formData.append('language', item.ttsLang);
+
+        fetch(`${getApiBaseUrl()}/api/tts`, {
+          method: 'POST',
+          body: formData,
+          signal: abortController.signal,
+        })
+          .then(async (resp) => {
+            if (!resp.ok) throw new Error('TTS error');
+            const blob = await resp.blob();
+            if (abortController.signal.aborted || isCancelled) return resolve(false);
+
+            const blobUrl = URL.createObjectURL(blob);
+            const audio = new Audio(blobUrl);
+            welcomeAudioRef.current = audio;
+
+            audio.onended = () => {
+              URL.revokeObjectURL(blobUrl);
+              welcomeAudioRef.current = null;
+              resolve(true);
+            };
+            audio.onerror = () => {
+              URL.revokeObjectURL(blobUrl);
+              welcomeAudioRef.current = null;
+              resolve(true);
+            };
+
+            await audio.play().catch(() => {
+              URL.revokeObjectURL(blobUrl);
+              welcomeAudioRef.current = null;
+              resolve(true);
+            });
+          })
+          .catch(() => {
+            if (abortController.signal.aborted || isCancelled) return resolve(false);
+            if ('speechSynthesis' in window) {
+              window.speechSynthesis.cancel();
+              const utt = new SpeechSynthesisUtterance(item.welcomePrompt);
+              utt.lang = item.ttsLang;
+              utt.rate = 0.95;
+              utt.onend = () => resolve(true);
+              utt.onerror = () => resolve(true);
+              window.speechSynthesis.speak(utt);
+            } else {
+              resolve(true);
+            }
+          });
+      });
+    };
+
+    const runLoop = async () => {
+      await new Promise((r) => setTimeout(r, 500));
+
+      let i = 0;
+      while (!abortController.signal.aborted && !isCancelled) {
+        const item = KIOSK_LANGUAGES[i % KIOSK_LANGUAGES.length];
+        const ok = await playPromptAsync(item);
+        if (!ok || abortController.signal.aborted || isCancelled) break;
+
+        setActiveSpeakingLang(null);
+        await new Promise((r) => setTimeout(r, 1200));
+        i++;
+      }
+    };
+
+    runLoop();
+
+    return () => {
+      isCancelled = true;
+      abortController.abort();
+      stopWelcomeLoop();
+    };
+  }, [step, stopWelcomeLoop]);
 
   // Auto-reset active consent audio when playback finishes
   useEffect(() => {
@@ -535,11 +841,11 @@ export function Login({ onSessionStarted }: Props) {
   // RENDER
   // ─────────────────────────────────────────────────────────────────
   return (
-    <div className={`flex-1 h-full w-full flex flex-col items-center justify-center overflow-y-auto ${step === 'CONSENT' ? '' : 'p-4 sm:p-6 bg-gradient-to-br from-slate-50 to-blue-50/30'}`}>
-      <div className={`w-full flex flex-col items-center ${step === 'CONSENT' ? 'h-full' : 'max-w-3xl'}`}>
+    <div className={`flex-1 h-full w-full flex flex-col items-center justify-center overflow-y-auto ${['CONSENT', 'WELCOME_LANGUAGE'].includes(step) ? '' : 'p-4 sm:p-6 bg-gradient-to-br from-slate-50 to-blue-50/30'}`}>
+      <div className={`w-full flex flex-col items-center ${['CONSENT', 'WELCOME_LANGUAGE'].includes(step) ? 'h-full' : 'max-w-3xl'}`}>
 
         {/* Header & Step Indicator — shown on most steps */}
-        {step !== 'CONSENT' && (
+        {!['CONSENT', 'WELCOME_LANGUAGE'].includes(step) && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
@@ -606,6 +912,257 @@ export function Login({ onSessionStarted }: Props) {
         )}
 
         <AnimatePresence mode="wait">
+
+          {/* ────────────────────────────────────────────────────────
+              STEP: WELCOME_LANGUAGE
+          ──────────────────────────────────────────────────────── */}
+          {step === 'WELCOME_LANGUAGE' && (
+            <motion.div
+              key="WELCOME_LANGUAGE"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0, y: -20 }}
+              className="w-full h-full flex flex-col lg:flex-row"
+              style={{ minHeight: 'calc(100vh - 120px)' }}
+            >
+              {/* ════════════════════════════════════════════════════════
+                  LEFT PANEL — System Capabilities & Feature Showcase (~62%)
+              ════════════════════════════════════════════════════════ */}
+              <div className="lg:w-[62%] w-full bg-transparent text-slate-900 p-6 sm:p-10 lg:p-14 flex flex-col justify-center relative overflow-hidden">
+                {/* Decorative orbs */}
+                <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100/70 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-80 h-80 bg-emerald-50/80 rounded-full blur-3xl pointer-events-none" />
+
+                {/* Hospital branding & Header */}
+                <div className="relative z-10 mb-8">
+                  <div className="flex items-center gap-4 mb-3">
+                    <div className="w-14 h-14 rounded-2xl bg-white shadow-md border border-slate-100 flex items-center justify-center p-2">
+                      <img src={logoPNG} alt="SwasthyaSync Logo" className="w-full h-full object-contain" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-blue-700 font-bold uppercase tracking-wider bg-blue-50 border border-blue-200/80 px-2 py-0.5 rounded-md">
+                          National Health Mission Ready
+                        </span>
+                        <span className="text-[11px] text-emerald-700 font-bold uppercase tracking-wider bg-emerald-50 border border-emerald-200/80 px-2 py-0.5 rounded-md">
+                          Smart OPD Kiosk
+                        </span>
+                      </div>
+                      <h1 className="text-2xl lg:text-3xl font-extrabold tracking-tight text-slate-900 mt-1">
+                        SwasthyaSync
+                      </h1>
+                    </div>
+                  </div>
+                  <p className="text-slate-600 text-sm sm:text-base font-medium max-w-xl">
+                    Next-Generation AI Clinical Triage, Multilingual Patient Intake & Doctor EMR Synchronization System.
+                  </p>
+                </div>
+
+                {/* Features Grid Header */}
+                <div className="relative z-10 flex items-center justify-between mb-4">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
+                    SYSTEM FEATURES & CAPABILITIES · मुख्य विशेषताएं
+                  </p>
+                  <span className="text-[11px] text-blue-600 font-semibold flex items-center gap-1">
+                    <Sparkles className="w-3.5 h-3.5 text-blue-500" />
+                    Powered by Medical AI
+                  </span>
+                </div>
+
+                {/* Feature Bento Grid */}
+                <div className="relative z-10 grid grid-cols-1 sm:grid-cols-2 gap-3.5 mb-6">
+                  {SYSTEM_FEATURES.map((feat, idx) => (
+                    <div
+                      key={idx}
+                      className="bg-white/75 backdrop-blur-md rounded-2xl p-4 border border-slate-200/80 shadow-2xs hover:shadow-md hover:border-blue-300 transition-all duration-200 flex flex-col justify-between"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shadow-2xs ${feat.iconBg}`}>
+                            {feat.icon}
+                          </div>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${feat.badgeColor}`}>
+                            {feat.badge}
+                          </span>
+                        </div>
+                        <h3 className="text-sm font-bold text-slate-900 leading-snug mb-1">
+                          {feat.title}
+                        </h3>
+                        <p className="text-xs text-slate-500 leading-relaxed">
+                          {feat.desc}
+                        </p>
+                      </div>
+                      <div className="mt-3 pt-2 border-t border-slate-100 flex items-center gap-1.5 text-[10px] font-semibold text-slate-400">
+                        <CheckCircle2 className="w-3 h-3 text-emerald-500" />
+                        <span>{feat.tag}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Trust and Compliance Footer */}
+                <div className="relative z-10 flex flex-wrap items-center gap-5 text-xs font-semibold text-slate-500 pt-3 border-t border-slate-200/70">
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <ShieldCheck className="w-4 h-4 text-blue-600" />
+                    <span>DPDP Act 2023 Compliant</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <Fingerprint className="w-4 h-4 text-purple-600" />
+                    <span>ABDM / ABHA Integrated</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-slate-600">
+                    <Sparkles className="w-4 h-4 text-amber-500" />
+                    <span>Sarvam AI Speech Engine</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ════════════════════════════════════════════════════════
+                  RIGHT PANEL — Language Selection & Rotating Audio Loop (~38%)
+              ════════════════════════════════════════════════════════ */}
+              <div className="lg:w-[38%] w-full bg-transparent p-6 sm:p-8 lg:p-10 flex flex-col justify-center items-center">
+                <div className="max-w-md w-full bg-white/80 backdrop-blur-xl border border-white p-6 sm:p-8 rounded-3xl shadow-2xl shadow-slate-200/60 flex flex-col">
+                  {/* Heading */}
+                  <div className="mb-6 text-center">
+                    <div className="inline-flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 text-white shadow-lg shadow-blue-500/30 mb-3 relative">
+                      <Languages className="w-7 h-7" />
+                      <span className="absolute -top-1 -right-1 flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-emerald-500" />
+                      </span>
+                    </div>
+                    <h2 className="text-xl sm:text-2xl font-extrabold text-slate-900 tracking-tight">
+                      Select Kiosk Language
+                    </h2>
+                    <p className="text-xs font-semibold text-blue-600 mt-1">
+                      अपनी भाषा चुनें · আপনার ভাষা নির্বাচন করুন
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Touch your language to begin your registration & intake
+                    </p>
+                  </div>
+
+                  {/* Voice Announcement Status Banner */}
+                  <div className="mb-5 p-3 rounded-2xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100 flex items-center justify-between">
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${activeSpeakingLang ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'}`}>
+                        <Volume2 className={`w-4 h-4 ${activeSpeakingLang ? 'animate-pulse' : ''}`} />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-[11px] font-bold text-slate-800 leading-tight truncate">
+                          {activeSpeakingLang === 'en' && 'English Audio Announcement'}
+                          {activeSpeakingLang === 'hi' && 'हिन्दी ऑडियो घोषणा जारी'}
+                          {activeSpeakingLang === 'bn' && 'বাংলা অডিও নির্দেশিকা চলছে'}
+                          {!activeSpeakingLang && 'Kiosk Audio Guide Active'}
+                        </p>
+                        <p className="text-[10px] text-slate-500 truncate">
+                          Dictating in 3 languages · Loop auto-rotates
+                        </p>
+                      </div>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (activeSpeakingLang) {
+                          stopWelcomeLoop();
+                        } else {
+                          playSingleWelcome(KIOSK_LANGUAGES[0]);
+                        }
+                      }}
+                      className="px-2.5 py-1 text-[11px] font-semibold text-slate-600 hover:text-blue-700 bg-white/90 border border-slate-200/80 rounded-lg shrink-0 shadow-2xs hover:bg-blue-50 transition-colors"
+                    >
+                      {activeSpeakingLang ? 'Pause Audio' : 'Play Audio'}
+                    </button>
+                  </div>
+
+                  {/* Language Cards */}
+                  <div className="space-y-3.5 mb-6">
+                    {KIOSK_LANGUAGES.map((lang) => {
+                      const isSpeakingThis = activeSpeakingLang === lang.id;
+                      return (
+                        <div
+                          key={lang.id}
+                          onClick={() => handleSelectLanguage(lang.id)}
+                          role="button"
+                          tabIndex={0}
+                          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') handleSelectLanguage(lang.id); }}
+                          className={`
+                            relative group p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200 select-none
+                            ${isSpeakingThis
+                              ? `${lang.borderActive} bg-white shadow-lg scale-[1.01]`
+                              : 'border-slate-200/80 bg-white/90 hover:border-blue-400 hover:shadow-md'
+                            }
+                          `}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-3.5">
+                              <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${lang.accent} text-white font-black flex items-center justify-center text-lg shadow-sm shrink-0`}>
+                                {lang.id === 'en' ? 'En' : lang.id === 'hi' ? 'अ' : 'অ'}
+                              </div>
+                              <div>
+                                <div className="flex items-center gap-2">
+                                  <h3 className="text-base font-bold text-slate-900">{lang.native}</h3>
+                                  <span className="text-xs text-slate-500 font-medium">({lang.label})</span>
+                                  <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200">
+                                    {lang.badge}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-0.5">{lang.sub}</p>
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  playSingleWelcome(lang);
+                                }}
+                                className={`p-2 rounded-xl transition-all ${
+                                  isSpeakingThis
+                                    ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-300'
+                                    : 'bg-slate-100 text-slate-400 hover:text-blue-600 hover:bg-blue-50'
+                                }`}
+                                title={`Listen in ${lang.label}`}
+                              >
+                                <Volume2 className="w-4 h-4" />
+                              </button>
+
+                              <div className="w-8 h-8 rounded-full bg-slate-100 group-hover:bg-blue-600 group-hover:text-white flex items-center justify-center transition-all">
+                                <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-white transition-colors" />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Active speaking indicator */}
+                          {isSpeakingThis && (
+                            <div className="mt-2.5 pt-2 border-t border-slate-100 flex items-center justify-between text-[11px] text-blue-700 font-medium">
+                              <span className="flex items-center gap-1.5">
+                                <span className="flex gap-0.5 items-end h-3">
+                                  <span className="w-1 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.3s] h-3" />
+                                  <span className="w-1 bg-blue-600 rounded-full animate-bounce [animation-delay:-0.15s] h-1.5" />
+                                  <span className="w-1 bg-blue-600 rounded-full animate-bounce h-2.5" />
+                                </span>
+                                Speaking now · Touch to select
+                              </span>
+                              <span className="text-[10px] text-blue-500 font-bold">START →</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Footer Instructions */}
+                  <div className="text-center pt-2 border-t border-slate-100 text-[11px] text-slate-400 leading-relaxed">
+                    <p>Touch any box above to set your language and proceed to Patient Consent.</p>
+                    <p className="text-[10px] text-slate-400 mt-1">Audio guidance will match your selected language throughout the kiosk.</p>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          )}
 
           {/* ────────────────────────────────────────────────────────
               STEP: CONSENT
@@ -696,6 +1253,26 @@ export function Login({ onSessionStarted }: Props) {
               ════════════════════════════════════════════════════════ */}
               <div className="lg:w-[38%] w-full bg-transparent p-8 sm:p-10 lg:p-12 flex flex-col justify-center items-center">
                 <div className="max-w-md w-full bg-white/70 backdrop-blur-xl border border-white p-8 rounded-3xl shadow-xl shadow-slate-200/50">
+                  {/* Change Language Navigation */}
+                  <div className="flex items-center justify-between mb-4">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        stop();
+                        setActiveConsentAudio(null);
+                        wasSpeakingRef.current = false;
+                        setStep('WELCOME_LANGUAGE');
+                      }}
+                      className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-blue-600 transition-colors px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-50 border border-slate-200/80"
+                    >
+                      <ArrowLeft className="w-3.5 h-3.5" />
+                      <span>Change Language / भाषा बदलें</span>
+                    </button>
+                    <span className="text-[11px] font-bold text-blue-600 uppercase tracking-wider bg-blue-50 border border-blue-100 px-2.5 py-0.5 rounded-full">
+                      {language === 'hi-IN' ? 'हिन्दी' : language === 'bn-IN' ? 'বাংলা' : 'English'}
+                    </span>
+                  </div>
+
                   {/* Small heading */}
                   <div className="mb-8">
                     <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100 mb-4">
