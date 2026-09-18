@@ -127,6 +127,22 @@ app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
 
 
 # ──────────────────────────────────────────────────────────────────────
+# Health & Status Endpoints
+# ──────────────────────────────────────────────────────────────────────
+
+@app.get("/")
+@app.get("/health")
+async def health_check():
+    """Liveness probe for Google Cloud Run and reverse proxies."""
+    return {
+        "status": "healthy",
+        "service": "SwasthyaSync Backend",
+        "version": "2.0.0",
+        "region": os.getenv("K_SERVICE", "local"),
+    }
+
+
+# ──────────────────────────────────────────────────────────────────────
 # REST Endpoints
 # ──────────────────────────────────────────────────────────────────────
 
