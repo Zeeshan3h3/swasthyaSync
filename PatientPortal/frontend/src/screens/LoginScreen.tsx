@@ -49,10 +49,12 @@ export const LoginScreen: React.FC = () => {
       const res = await axios.post(`${API_BASE}/api/portal/auth/init`, { phone });
       setTxnId(res.data.transaction_id);
       setPhoneHint(res.data.phone_hint);
-      setDemoOtp(res.data.debug_otp || '');
-      setResendCountdown(res.data.resend_after_seconds || 60);
+      const code = res.data.debug_otp || '123456';
+      setDemoOtp(code);
+      setOtp(code);
+      setResendCountdown(res.data.resend_after_seconds || 5);
       setStage('ENTER_OTP');
-      toast.success('OTP sent successfully!');
+      toast.success(`Mock OTP generated: ${code}`);
     } catch (err: any) {
       const msg = parseError(err, 'Failed to send OTP. Try again.');
       setError(msg);
@@ -215,21 +217,35 @@ export const LoginScreen: React.FC = () => {
               </button>
 
               <div className="text-center mb-2">
-                <div className="w-12 h-12 bg-emerald-50 border border-emerald-100/80 rounded-full flex items-center justify-center mx-auto mb-3 shadow-xs">
-                  <ShieldCheck className="w-6 h-6 text-emerald-600" />
+                <div className="w-12 h-12 bg-blue-50 border border-blue-100/80 rounded-full flex items-center justify-center mx-auto mb-3 shadow-xs">
+                  <ShieldCheck className="w-6 h-6 text-blue-600" />
+                </div>
                 <p className="text-sm font-semibold text-slate-700">
-                  OTP sent to <span className="text-blue-600 font-bold">{phoneHint}</span>
+                  Verification for <span className="text-blue-600 font-bold">{phoneHint}</span>
                 </p>
-                <div className="mt-2.5 flex flex-col items-center">
+
+                {/* Prominent Simulated Mock OTP Box */}
+                <div className="mt-3.5 p-3.5 bg-gradient-to-br from-blue-50 via-indigo-50/70 to-slate-50 border border-blue-200/90 rounded-2xl shadow-xs text-center">
+                  <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 bg-blue-100 text-blue-800 text-[10px] font-extrabold uppercase tracking-wider rounded-full mb-1.5">
+                    <span className="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse" />
+                    Simulated Demo OTP
+                  </div>
+                  <p className="text-xs text-slate-600 mb-2 font-medium">
+                    This is a mocked OTP simulating actual SMS delivery for this demo:
+                  </p>
                   <button
                     type="button"
                     onClick={() => setOtp(demoOtp || '123456')}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold rounded-full shadow-xs cursor-pointer transition-all active:scale-95"
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-white hover:bg-blue-50 border border-blue-300 rounded-xl shadow-xs cursor-pointer transition-all active:scale-95 group"
                   >
-                    <span>Click to auto-fill code:</span>
-                    <span className="font-mono font-extrabold tracking-widest text-amber-950">{demoOtp || '123456'}</span>
+                    <span className="text-xs font-semibold text-slate-500">Your OTP:</span>
+                    <span className="text-lg font-mono font-black tracking-widest text-blue-600 group-hover:scale-105 transition-transform">
+                      {demoOtp || '123456'}
+                    </span>
+                    <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-2 py-0.5 rounded-md ml-1">
+                      Auto-filled ✓
+                    </span>
                   </button>
-                  <p className="text-[11px] text-slate-400 mt-1">Mock test mode enabled</p>
                 </div>
               </div>
 

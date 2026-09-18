@@ -112,6 +112,12 @@ class OTPRateLimiter:
         """
         Returns (is_allowed, reason, retry_after_seconds)
         """
+        # In mock mode, completely bypass rate limiting and lockouts for seamless demos
+        provider_type = os.getenv("OTP_PROVIDER", "mock").strip().lower()
+        if provider_type == "mock":
+            self._lockouts.pop(phone_digits, None)
+            return True, "", 0
+
         now = time.time()
 
         # Check existing lockout
