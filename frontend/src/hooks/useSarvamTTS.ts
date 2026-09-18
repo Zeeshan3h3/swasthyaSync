@@ -63,7 +63,20 @@ export function useSarvamTTS(): UseSarvamTTSReturn {
         if ('speechSynthesis' in window) {
           window.speechSynthesis.cancel();
           const utterance = new SpeechSynthesisUtterance(text);
-          utterance.lang = language || 'hi-IN';
+          const targetLang = language || 'hi-IN';
+          utterance.lang = targetLang;
+
+          const voices = window.speechSynthesis.getVoices();
+          const langPrefix = targetLang.slice(0, 2).toLowerCase();
+          const matchingVoice = voices.find(v => {
+            const vLang = v.lang.toLowerCase().replace('_', '-');
+            return vLang.startsWith(langPrefix) ||
+              (langPrefix === 'bn' && (v.name.toLowerCase().includes('bengali') || v.name.toLowerCase().includes('bangla')));
+          });
+          if (matchingVoice) {
+            utterance.voice = matchingVoice;
+          }
+
           utterance.onstart = () => setIsSpeaking(true);
           
           let fallbackLoops = loopCount;

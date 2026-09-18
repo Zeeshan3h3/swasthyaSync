@@ -118,7 +118,7 @@ const KIOSK_LANGUAGES: WelcomeLangItem[] = [
     badge: 'আঞ্চলিক',
     accent: 'from-amber-600 to-orange-600',
     borderActive: 'border-amber-500 ring-4 ring-amber-500/20 shadow-amber-500/20',
-    welcomePrompt: 'স্বাস্থ্যসিঙ্কে আপনাকে স্বাগতম। আপনার স্বাস্থ্য পরীক্ষা শুরু করার জন্য অনুগ্রহ করে স্ক্রিনে আপনার ভাষা স্পর্শ করুন।',
+    welcomePrompt: 'স্বাস্থ্যসিঙ্কে আপনাকে স্বাগতম। আপনার স্বাস্থ্য পরীক্ষা শুরু করতে অনুগ্রহ করে স্ক্রিনে আপনার ভাষা নির্বাচন করুন।',
   },
 ];
 
@@ -370,6 +370,14 @@ export function Login({ onSessionStarted }: Props) {
       const utt = new SpeechSynthesisUtterance(item.welcomePrompt);
       utt.lang = item.ttsLang;
       utt.rate = 0.95;
+      const voices = window.speechSynthesis.getVoices();
+      const langPrefix = item.ttsLang.slice(0, 2).toLowerCase();
+      const matchingVoice = voices.find(v => {
+        const vLang = v.lang.toLowerCase().replace('_', '-');
+        return vLang.startsWith(langPrefix) ||
+          (langPrefix === 'bn' && (v.name.toLowerCase().includes('bengali') || v.name.toLowerCase().includes('bangla')));
+      });
+      if (matchingVoice) utt.voice = matchingVoice;
       utt.onend = () => setActiveSpeakingLang(null);
       utt.onerror = () => setActiveSpeakingLang(null);
       window.speechSynthesis.speak(utt);
@@ -464,6 +472,14 @@ export function Login({ onSessionStarted }: Props) {
               const utt = new SpeechSynthesisUtterance(item.welcomePrompt);
               utt.lang = item.ttsLang;
               utt.rate = 0.95;
+              const voices = window.speechSynthesis.getVoices();
+              const langPrefix = item.ttsLang.slice(0, 2).toLowerCase();
+              const matchingVoice = voices.find(v => {
+                const vLang = v.lang.toLowerCase().replace('_', '-');
+                return vLang.startsWith(langPrefix) ||
+                  (langPrefix === 'bn' && (v.name.toLowerCase().includes('bengali') || v.name.toLowerCase().includes('bangla')));
+              });
+              if (matchingVoice) utt.voice = matchingVoice;
               utt.onend = () => resolve(true);
               utt.onerror = () => resolve(true);
               window.speechSynthesis.speak(utt);

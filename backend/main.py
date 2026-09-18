@@ -418,10 +418,20 @@ async def text_to_speech_endpoint(
     if not audio_bytes:
         return JSONResponse(status_code=503, content={"error": "TTS unavailable"})
 
+    # Check format: MP3 (Google TTS fallback) vs WAV (Sarvam)
+    is_mp3 = (
+        audio_bytes.startswith(b"\xff\xfb")
+        or audio_bytes.startswith(b"\xff\xf3")
+        or audio_bytes.startswith(b"\xff\xf2")
+        or audio_bytes.startswith(b"ID3")
+    )
+    media_type = "audio/mpeg" if is_mp3 else "audio/wav"
+    filename = "speech.mp3" if is_mp3 else "speech.wav"
+
     return Response(
         content=audio_bytes,
-        media_type="audio/wav",
-        headers={"Content-Disposition": "inline; filename=speech.wav"},
+        media_type=media_type,
+        headers={"Content-Disposition": f"inline; filename={filename}"},
     )
 
 
