@@ -5,13 +5,16 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Phone, Users, UserPlus, Building2, ArrowRight, User, Calendar, Activity,
   MapPin, Globe, Shield, ShieldCheck, CheckCircle2, Fingerprint, Smartphone,
-  BadgeCheck, RefreshCw, ArrowLeft, ChevronRight, AlertCircle, Loader2, UserCircle
+  BadgeCheck, RefreshCw, ArrowLeft, ChevronRight, AlertCircle, Loader2, UserCircle,
+  Mic, FileSearch, HeartPulse, Ticket, Volume2, VolumeX
 } from 'lucide-react';
 import { getApiBaseUrl } from '../config';
 import { OtpInput } from '../components/OtpInput';
 import { toast } from '../components/Toast';
 import { useResendCooldown } from '../hooks/useResendCooldown';
 import { useAudioGuide } from '../hooks/useAudioGuide';
+import type { TranslationKey } from '../utils/audioTranslations';
+import logoPNG from '../assets/logo.png';
 
 // ── Profile picture imports ───────────────────────────────────────────
 import pfp1 from '../assets/pfp1.jpg';
@@ -79,16 +82,19 @@ const CONSENT_ITEMS = [
     key: 'health_data',
     text: 'I consent to SwasthyaSync capturing my health history (voice & text) for this consultation.',
     subtext: 'Includes symptom intake and clinical assessment.',
+    audioKey: 'consent_explain_health_data' as TranslationKey,
   },
   {
     key: 'document_extract',
     text: 'I authorize extraction of health information from documents I upload to this system.',
     subtext: 'Prescriptions, lab reports and medical records.',
+    audioKey: 'consent_explain_document_extract' as TranslationKey,
   },
   {
     key: 'data_sharing',
     text: 'I permit secure sharing of my health data with the assigned doctor under the DPDP Act 2023.',
     subtext: 'Data is never shared with third parties without your consent.',
+    audioKey: 'consent_explain_data_sharing' as TranslationKey,
   },
 ] as const;
 
@@ -162,6 +168,7 @@ export function Login({ onSessionStarted }: Props) {
   const [phoneHint, setPhoneHint] = useState('');
   const [otp, setOtp] = useState('');
   const [otpHasError, setOtpHasError] = useState(false);
+  const [demoOtp, setDemoOtp] = useState<string | null>(null);
 
   // ── Mobile Path B ─────────────────────────────────────────────────
   const [phone, setPhone] = useState(saved?.phone || '');
@@ -181,7 +188,40 @@ export function Login({ onSessionStarted }: Props) {
   const [selectedDoctor, setSelectedDoctor] = useState(saved?.selectedDoctor || '');
   const [doctors, setDoctors] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
-  const { language, setLanguage, speak } = useAudioGuide();
+  const { language, setLanguage, speak, stop, isSpeaking } = useAudioGuide();
+  const [activeConsentAudio, setActiveConsentAudio] = useState<ConsentKey | null>(null);
+  const wasSpeakingRef = useRef(false);
+
+  // Auto-reset active consent audio when playback finishes
+  useEffect(() => {
+    if (isSpeaking) {
+      wasSpeakingRef.current = true;
+    } else if (wasSpeakingRef.current) {
+      wasSpeakingRef.current = false;
+      setActiveConsentAudio(null);
+    }
+  }, [isSpeaking]);
+
+  // Stop active consent audio when user advances beyond consent step
+  useEffect(() => {
+    if (step !== 'CONSENT') {
+      stop();
+    }
+  }, [step, stop]);
+
+  const handleToggleConsentAudio = (key: ConsentKey, audioKey: TranslationKey) => {
+    if (activeConsentAudio === key) {
+      stop();
+      setActiveConsentAudio(null);
+      wasSpeakingRef.current = false;
+    } else {
+      stop();
+      setActiveConsentAudio(key);
+      wasSpeakingRef.current = false;
+      speak(audioKey, undefined, 1, true);
+    }
+  };
+
   const { t } = useTranslation();
   const [calculatedBmi, setCalculatedBmi] = useState('');
   const [conflictInfo, setConflictInfo] = useState<{token: number; dest: string} | null>(null);
@@ -225,14 +265,18 @@ export function Login({ onSessionStarted }: Props) {
           speak('enter_mobile');
           break;
         case 'REGISTER':
-          speak('enter_name');
+          if (abhaSourceProfile) {
+            speak('register_verify_abha');
+          } else {
+            speak('register_manual');
+          }
           break;
       }
     };
     // Slight delay so DOM renders first before speaking
     const t = setTimeout(speakStep, 300);
     return () => clearTimeout(t);
-  }, [step, speak]);
+  }, [step, abhaSourceProfile, speak]);
 
   // ── Load doctors + departments ────────────────────────────────────
   useEffect(() => {
@@ -300,11 +344,12 @@ export function Login({ onSessionStarted }: Props) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.detail?.message || 'ABHA Number not found. Try mobile login.');
+        toast.error(typeof data.detail === 'string' ? data.detail : (data.detail?.message || 'ABHA Number not found. Try mobile login.'));
         return;
       }
       setTxnId(data.transaction_id);
       setPhoneHint(data.phone_hint);
+      if (data.debug_otp) setDemoOtp(data.debug_otp);
       setOtp('');
       setOtpHasError(false);
       abhaResend.start();
@@ -329,7 +374,7 @@ export function Login({ onSessionStarted }: Props) {
       const data = await res.json();
       if (!res.ok) {
         setOtpHasError(true);
-        toast.error(data.detail?.message || 'Incorrect OTP.');
+        toast.error(typeof data.detail === 'string' ? data.detail : (data.detail?.message || 'Incorrect OTP.'));
         return;
       }
       setAbhaProfile(data.profile);
@@ -386,11 +431,12 @@ export function Login({ onSessionStarted }: Props) {
       });
       const data = await res.json();
       if (!res.ok) {
-        toast.error(data.detail?.message || 'Failed to send OTP.');
+        toast.error(typeof data.detail === 'string' ? data.detail : (data.detail?.message || 'Failed to send OTP.'));
         return;
       }
       setMobileTxnId(data.transaction_id);
       setMobilePhoneHint(data.phone_hint);
+      if (data.debug_otp) setDemoOtp(data.debug_otp);
       setMobileOtp('');
       setMobileOtpHasError(false);
       mobileResend.start();
@@ -415,7 +461,7 @@ export function Login({ onSessionStarted }: Props) {
       const data = await res.json();
       if (!res.ok) {
         setMobileOtpHasError(true);
-        toast.error(data.detail?.message || 'Incorrect OTP.');
+        toast.error(typeof data.detail === 'string' ? data.detail : (data.detail?.message || 'Incorrect OTP.'));
         return;
       }
       setPatients(data.patients || []);
@@ -489,20 +535,73 @@ export function Login({ onSessionStarted }: Props) {
   // RENDER
   // ─────────────────────────────────────────────────────────────────
   return (
-    <div className="flex-1 h-full w-full flex flex-col items-center justify-center p-4 sm:p-6 bg-gradient-to-br from-slate-50 to-blue-50/30 overflow-y-auto">
-      <div className="w-full max-w-3xl flex flex-col items-center">
+    <div className={`flex-1 h-full w-full flex flex-col items-center justify-center overflow-y-auto ${step === 'CONSENT' ? '' : 'p-4 sm:p-6 bg-gradient-to-br from-slate-50 to-blue-50/30'}`}>
+      <div className={`w-full flex flex-col items-center ${step === 'CONSENT' ? 'h-full' : 'max-w-3xl'}`}>
 
-        {/* Header — shown on most steps */}
+        {/* Header & Step Indicator — shown on most steps */}
         {step !== 'CONSENT' && (
           <motion.div
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="w-full text-center mb-6"
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="w-full text-center mb-6 flex flex-col items-center"
           >
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 mb-1 tracking-tight">
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-0.5 tracking-tight">
               SwasthyaSync
             </h2>
-            <p className="text-slate-400 font-medium text-sm">AI-Powered Clinical Intake System</p>
+            <p className="text-slate-400 font-medium text-xs sm:text-sm mb-4">AI-Powered Clinical Intake System</p>
+
+            {/* Horizontal Step Indicator Dots */}
+            <div className="flex items-center gap-2 px-3 py-1.5 bg-white/80 backdrop-blur-md rounded-full border border-slate-200/80 shadow-2xs">
+              {[
+                { label: 'Identify', idx: 0 },
+                { label: 'Verify', idx: 1 },
+                { label: 'Profile', idx: 2 },
+                { label: 'Department', idx: 3 },
+              ].map((s, i, arr) => {
+                const currentIdx = ['LANDING', 'ABHA_IDENTIFY', 'PHONE'].includes(step)
+                  ? 0
+                  : ['ABHA_OTP', 'MOBILE_OTP_VERIFY'].includes(step)
+                  ? 1
+                  : ['ABHA_PROFILE_CONFIRM', 'SELECT_MEMBER', 'REGISTER'].includes(step)
+                  ? 2
+                  : 3;
+                const isCurrent = currentIdx === s.idx;
+                const isDone = currentIdx > s.idx;
+
+                return (
+                  <div key={s.idx} className="flex items-center gap-2">
+                    <div className="flex items-center gap-1.5">
+                      <div
+                        className={`w-5 h-5 rounded-full text-[10px] font-bold flex items-center justify-center transition-all duration-200 ${
+                          isCurrent
+                            ? 'bg-blue-600 text-white shadow-xs scale-105'
+                            : isDone
+                            ? 'bg-emerald-500 text-white'
+                            : 'bg-slate-100 text-slate-400'
+                        }`}
+                      >
+                        {isDone ? '✓' : s.idx + 1}
+                      </div>
+                      <span
+                        className={`text-[11px] font-bold hidden sm:inline transition-colors duration-200 ${
+                          isCurrent ? 'text-blue-700' : isDone ? 'text-slate-700' : 'text-slate-400'
+                        }`}
+                      >
+                        {s.label}
+                      </span>
+                    </div>
+                    {i < arr.length - 1 && (
+                      <div
+                        className={`w-3 sm:w-4 h-0.5 rounded-full transition-colors duration-200 ${
+                          isDone ? 'bg-emerald-400' : 'bg-slate-200'
+                        }`}
+                      />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
           </motion.div>
         )}
 
@@ -514,105 +613,221 @@ export function Login({ onSessionStarted }: Props) {
           {step === 'CONSENT' && (
             <motion.div
               key="CONSENT"
-              initial={{ opacity: 0, y: 24 }}
-              animate={{ opacity: 1, y: 0 }}
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
               exit={{ opacity: 0, y: -24 }}
-              className="w-full max-w-lg"
+              className="w-full h-full flex flex-col lg:flex-row"
+              style={{ minHeight: 'calc(100vh - 120px)' }}
             >
-              {/* Title block */}
-              <div className="text-center mb-8">
-                <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-blue-600 mb-4 shadow-lg shadow-blue-600/25">
-                  <Shield className="w-8 h-8 text-white" />
+              {/* ════════════════════════════════════════════════════════
+                  LEFT PANEL — Brand + Workflow Overview (~60%)
+              ════════════════════════════════════════════════════════ */}
+              <div className="lg:w-[62%] w-full bg-transparent text-slate-900 p-8 sm:p-12 lg:p-16 flex flex-col justify-center relative overflow-hidden">
+                {/* Decorative orbs */}
+                <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100 rounded-full blur-3xl pointer-events-none" />
+                <div className="absolute bottom-0 left-0 w-72 h-72 bg-emerald-50 rounded-full blur-3xl pointer-events-none" />
+
+                {/* Hospital branding */}
+                <div className="relative z-10 mb-10">
+                  <div className="flex items-center gap-4 mb-6">
+                    <div className="w-14 h-14 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center">
+                      <img src={logoPNG} alt="SwasthyaSync" className="w-9 h-9 object-contain" />
+                    </div>
+                    <div>
+                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">{t('workflow.gov_kiosk')}</p>
+                      <h2 className="text-2xl lg:text-3xl font-extrabold tracking-tight leading-tight text-slate-900">SwasthyaSync</h2>
+                    </div>
+                  </div>
+                  <p className="text-slate-600 text-lg font-medium">{t('workflow.tagline')}</p>
                 </div>
-                <h1 className="text-3xl font-extrabold text-slate-900 mb-2">{t('consent.title')}</h1>
-                <p className="text-slate-500 text-sm leading-relaxed">
-                  {t('consent.subtitle')}
-                </p>
+
+                {/* ── Workflow Steps (vertical connector style) ── */}
+                <div className="relative z-10 space-y-0">
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">{t('workflow.how_it_works')}</p>
+
+                  {[
+                    {
+                      icon: <Mic className="w-5 h-5" />,
+                      label: t('workflow.step1_title'),
+                      desc: t('workflow.step1_desc'),
+                      color: 'bg-blue-600',
+                    },
+                    {
+                      icon: <FileSearch className="w-5 h-5" />,
+                      label: t('workflow.step2_title'),
+                      desc: t('workflow.step2_desc'),
+                      color: 'bg-emerald-600',
+                    },
+                    {
+                      icon: <HeartPulse className="w-5 h-5" />,
+                      label: t('workflow.step3_title'),
+                      desc: t('workflow.step3_desc'),
+                      color: 'bg-red-500',
+                    },
+                    {
+                      icon: <Ticket className="w-5 h-5" />,
+                      label: t('workflow.step4_title'),
+                      desc: t('workflow.step4_desc'),
+                      color: 'bg-slate-500',
+                    },
+                  ].map((step, i, arr) => (
+                    <div key={i} className="flex items-stretch gap-5">
+                      {/* Connector line + icon */}
+                      <div className="flex flex-col items-center">
+                        <div className={`w-10 h-10 rounded-xl ${step.color} flex items-center justify-center text-white shrink-0 shadow-sm`}>
+                          {step.icon}
+                        </div>
+                        {i < arr.length - 1 && (
+                          <div className="w-px flex-1 bg-slate-200 my-1" />
+                        )}
+                      </div>
+                      {/* Text */}
+                      <div className={`pb-6 ${i === arr.length - 1 ? 'pb-0' : ''}`}>
+                        <h4 className="text-sm font-bold text-slate-900 mb-0.5">{step.label}</h4>
+                        <p className="text-sm text-slate-500 leading-relaxed">{step.desc}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              {/* Consent checkboxes */}
-              <div className="space-y-3 mb-6">
-                {CONSENT_ITEMS.map(item => (
-                  <motion.label
-                    key={item.key}
-                    whileHover={{ scale: 1.01 }}
-                    whileTap={{ scale: 0.99 }}
+              {/* ════════════════════════════════════════════════════════
+                  RIGHT PANEL — Consent + Action (~38%)
+              ════════════════════════════════════════════════════════ */}
+              <div className="lg:w-[38%] w-full bg-transparent p-8 sm:p-10 lg:p-12 flex flex-col justify-center items-center">
+                <div className="max-w-md w-full bg-white/70 backdrop-blur-xl border border-white p-8 rounded-3xl shadow-xl shadow-slate-200/50">
+                  {/* Small heading */}
+                  <div className="mb-8">
+                    <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-100 mb-4">
+                      <Shield className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <h3 className="text-xl font-extrabold text-slate-900 mb-1">{t('consent.title')}</h3>
+                    <p className="text-xs text-slate-400 leading-relaxed">
+                      DPDP Act 2023 · National Digital Health Mission
+                    </p>
+                  </div>
+
+                  {/* Consent checkboxes */}
+                  <div className="space-y-3 mb-6">
+                    {CONSENT_ITEMS.map(item => {
+                      const isItemSpeaking = activeConsentAudio === item.key;
+                      return (
+                        <div
+                          key={item.key}
+                          className={`
+                            flex items-center justify-between gap-3 p-3.5 rounded-xl border-2 transition-all duration-200
+                            ${consented[item.key]
+                              ? 'border-blue-400 bg-blue-50/70 shadow-sm'
+                              : 'border-slate-200 bg-white hover:border-slate-300'
+                            }
+                          `}
+                        >
+                          <label className="flex items-start gap-3 flex-1 min-w-0 cursor-pointer select-none">
+                            {/* Custom checkbox */}
+                            <div className="mt-0.5 shrink-0">
+                              <div
+                                className={`
+                                  w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all duration-200
+                                  ${consented[item.key]
+                                    ? 'border-blue-600 bg-blue-600'
+                                    : 'border-slate-300 bg-white'
+                                  }
+                                `}
+                              >
+                                <AnimatePresence>
+                                  {consented[item.key] && (
+                                    <motion.svg
+                                      initial={{ scale: 0.4, opacity: 0 }}
+                                      animate={{ scale: 1, opacity: 1 }}
+                                      exit={{ scale: 0.4, opacity: 0 }}
+                                      transition={{ type: "spring", stiffness: 450, damping: 25 }}
+                                      className="w-3 h-3 text-white"
+                                      fill="none"
+                                      viewBox="0 0 24 24"
+                                      stroke="currentColor"
+                                      strokeWidth={3}
+                                    >
+                                      <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                                    </motion.svg>
+                                  )}
+                                </AnimatePresence>
+                              </div>
+                            </div>
+                            <input
+                              type="checkbox"
+                              className="sr-only"
+                              checked={consented[item.key]}
+                              onChange={e => setConsented(prev => ({ ...prev, [item.key]: e.target.checked }))}
+                            />
+                            <div className="min-w-0 pr-1">
+                              <p className="text-xs font-semibold text-slate-800 leading-snug">{t(`consent.${item.key}`)}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">{t(`consent.${item.key}_sub`)}</p>
+                            </div>
+                          </label>
+
+                          {/* Interactive Audio explanation toggle */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.preventDefault();
+                              e.stopPropagation();
+                              handleToggleConsentAudio(item.key, item.audioKey);
+                            }}
+                            className={`
+                              p-2 rounded-xl shrink-0 transition-all duration-200 flex items-center justify-center relative
+                              ${isItemSpeaking
+                                ? 'bg-blue-600 text-white shadow-md shadow-blue-500/40 ring-2 ring-blue-400 ring-offset-1 animate-pulse'
+                                : 'bg-slate-100/90 text-slate-500 hover:bg-blue-100 hover:text-blue-600 hover:scale-105 active:scale-95'
+                              }
+                            `}
+                            title={isItemSpeaking ? "Click to stop explanation" : "Click to hear explanation in current language"}
+                            aria-label={isItemSpeaking ? "Stop audio explanation" : "Listen to explanation"}
+                          >
+                            {isItemSpeaking ? (
+                              <VolumeX className="w-4 h-4 text-white" />
+                            ) : (
+                              <Volume2 className="w-4 h-4" />
+                            )}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Notice */}
+                  <p className="text-[10px] text-slate-400 text-center mb-6 leading-relaxed">
+                    <ShieldCheck className="w-3 h-3 inline mr-1 text-blue-400" />
+                    {t('consent.encrypted_notice')}
+                  </p>
+
+                  {/* Start Interview button */}
+                  <motion.button
+                    onClick={() => {
+                      if (allConsented) {
+                        stop();
+                        setActiveConsentAudio(null);
+                        wasSpeakingRef.current = false;
+                        setStep('LANDING');
+                      }
+                    }}
+                    disabled={!allConsented}
+                    whileTap={allConsented ? { scale: 0.97 } : {}}
                     className={`
-                      flex items-start gap-4 p-4 rounded-2xl border-2 cursor-pointer transition-all duration-200
-                      ${consented[item.key]
-                        ? 'border-blue-400 bg-blue-50/70'
-                        : 'border-slate-200 bg-white hover:border-slate-300'
+                      w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-base transition-all duration-300
+                      ${allConsented
+                        ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/25 hover:shadow-xl hover:shadow-blue-600/35'
+                        : 'bg-slate-100 text-slate-400 cursor-not-allowed'
                       }
                     `}
                   >
-                    {/* Custom checkbox */}
-                    <div className="mt-0.5 shrink-0">
-                      <div
-                        className={`
-                          w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all duration-200
-                          ${consented[item.key]
-                            ? 'border-blue-600 bg-blue-600'
-                            : 'border-slate-300 bg-white'
-                          }
-                        `}
-                      >
-                        <AnimatePresence>
-                          {consented[item.key] && (
-                            <motion.svg
-                              initial={{ scale: 0, opacity: 0 }}
-                              animate={{ scale: 1, opacity: 1 }}
-                              exit={{ scale: 0, opacity: 0 }}
-                              className="w-3.5 h-3.5 text-white"
-                              fill="none"
-                              viewBox="0 0 24 24"
-                              stroke="currentColor"
-                              strokeWidth={3}
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                            </motion.svg>
-                          )}
-                        </AnimatePresence>
-                      </div>
-                    </div>
-                    <input
-                      type="checkbox"
-                      className="sr-only"
-                      checked={consented[item.key]}
-                      onChange={e => setConsented(prev => ({ ...prev, [item.key]: e.target.checked }))}
-                    />
-                    <div>
-                      <p className="text-sm font-semibold text-slate-800 leading-snug">{t(`consent.${item.key}`)}</p>
-                      <p className="text-xs text-slate-400 mt-0.5">{t(`consent.${item.key}_sub`)}</p>
-                    </div>
-                  </motion.label>
-                ))}
+                    {allConsented ? (
+                      <><CheckCircle2 className="w-5 h-5" /> Start Interview<ArrowRight className="w-4 h-4 ml-1" /></>
+                    ) : (
+                      t('consent.accept_all')
+                    )}
+                  </motion.button>
+                </div>
               </div>
-
-              {/* Notice */}
-              <p className="text-xs text-slate-400 text-center mb-6 leading-relaxed">
-                <ShieldCheck className="w-3.5 h-3.5 inline mr-1 text-blue-400" />
-                {t('consent.encrypted_notice')}
-              </p>
-
-              {/* Proceed button */}
-              <motion.button
-                onClick={() => allConsented && setStep('LANDING')}
-                disabled={!allConsented}
-                whileTap={allConsented ? { scale: 0.97 } : {}}
-                className={`
-                  w-full flex items-center justify-center gap-2 py-4 rounded-2xl font-bold text-lg transition-all duration-300
-                  ${allConsented
-                    ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white shadow-lg shadow-blue-600/25 hover:shadow-xl hover:shadow-blue-600/35'
-                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-                  }
-                `}
-              >
-                {allConsented ? (
-                  <><CheckCircle2 className="w-5 h-5" /> {t('consent.agree_proceed')}</>
-                ) : (
-                  t('consent.accept_all')
-                )}
-              </motion.button>
             </motion.div>
           )}
 
@@ -622,9 +837,10 @@ export function Login({ onSessionStarted }: Props) {
           {step === 'LANDING' && (
             <motion.div
               key="LANDING"
-              initial={{ opacity: 0, y: 24 }}
+              initial={{ opacity: 0, y: 14 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -24 }}
+              exit={{ opacity: 0, y: -10 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="w-full max-w-2xl"
             >
               {/* Back to Consent */}
@@ -643,10 +859,10 @@ export function Login({ onSessionStarted }: Props) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {/* Card A — ABHA */}
                 <motion.button
-                  whileHover={{ y: -4, scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ y: -2, scale: 1.005 }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={() => setStep('ABHA_IDENTIFY')}
-                  className="flex flex-col items-start p-6 rounded-3xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-xl shadow-blue-600/25 text-left transition-all"
+                  className="flex flex-col items-start p-6 rounded-3xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-xl shadow-blue-600/25 text-left transition-[transform,box-shadow] cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-4">
                     <div className="bg-white/20 backdrop-blur px-3 py-1 rounded-full text-xs font-bold tracking-wide">{t('landing.abha_tag')}</div>
@@ -666,10 +882,10 @@ export function Login({ onSessionStarted }: Props) {
 
                 {/* Card B — Mobile */}
                 <motion.button
-                  whileHover={{ y: -4, scale: 1.01 }}
-                  whileTap={{ scale: 0.98 }}
+                  whileHover={{ y: -2, scale: 1.005 }}
+                  whileTap={{ scale: 0.97 }}
                   onClick={() => setStep('PHONE')}
-                  className="flex flex-col items-start p-6 rounded-3xl bg-white border-2 border-slate-100 text-left shadow-lg hover:border-slate-200 hover:shadow-xl transition-all"
+                  className="flex flex-col items-start p-6 rounded-3xl bg-white border-2 border-slate-100 text-left shadow-lg hover:border-slate-200 hover:shadow-card-hover transition-[transform,box-shadow,border-color] cursor-pointer"
                 >
                   <div className="flex items-center gap-2 mb-4">
                     <div className="bg-slate-100 px-3 py-1 rounded-full text-xs font-bold tracking-wide text-slate-600">{t('landing.walkin_tag')}</div>
@@ -690,8 +906,8 @@ export function Login({ onSessionStarted }: Props) {
 
               {/* Card C — Guest (no phone, no ABHA) */}
               <motion.button
-                whileHover={{ y: -4, scale: 1.01 }}
-                whileTap={{ scale: 0.98 }}
+                whileHover={{ y: -2, scale: 1.005 }}
+                whileTap={{ scale: 0.97 }}
                 onClick={() => {
                   setIsGuestMode(true);
                   setPhone('');
@@ -700,7 +916,7 @@ export function Login({ onSessionStarted }: Props) {
                   setSelectedPatient(null);
                   setStep('REGISTER');
                 }}
-                className="mt-4 w-full flex flex-col items-start p-6 rounded-3xl bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-xl shadow-emerald-600/25 text-left transition-all"
+                className="mt-4 w-full flex flex-col items-start p-6 rounded-3xl bg-gradient-to-br from-emerald-600 to-green-700 text-white shadow-xl shadow-emerald-600/25 text-left transition-[transform,box-shadow] cursor-pointer"
               >
                 <div className="flex items-center gap-2 mb-4">
                   <div className="bg-white/20 backdrop-blur px-3 py-1 rounded-full text-xs font-bold tracking-wide">{t('landing.guest_tag')}</div>
@@ -809,9 +1025,17 @@ export function Login({ onSessionStarted }: Props) {
                   </div>
                 </div>
 
-                <div className="bg-slate-50 rounded-2xl p-3 mb-6 flex items-center gap-2 text-sm text-slate-600">
-                  <AlertCircle className="w-4 h-4 text-blue-500 shrink-0" />
-                  {t('abha.otp_sent')} <span className="font-bold text-slate-800 ml-1">{phoneHint}</span>
+                <div className="bg-slate-50 rounded-2xl p-3 mb-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-blue-500 shrink-0" />
+                    <span>{t('abha.otp_sent')} <span className="font-bold text-slate-800 ml-1">{phoneHint}</span></span>
+                  </div>
+                  {demoOtp && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold rounded-full shadow-xs shrink-0">
+                      <span>Demo OTP:</span>
+                      <span className="font-mono font-bold tracking-widest text-amber-900">{demoOtp}</span>
+                    </span>
+                  )}
                 </div>
 
                 <div className="mb-6">
@@ -850,12 +1074,13 @@ export function Login({ onSessionStarted }: Props) {
           {step === 'ABHA_PROFILE_CONFIRM' && abhaProfile && (
             <motion.div
               key="ABHA_PROFILE_CONFIRM"
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
+              initial={{ opacity: 0, y: 12, scale: 0.98 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: -8, scale: 0.98 }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
               className="w-full max-w-md"
             >
-              <div className="bg-white rounded-3xl shadow-xl border border-slate-100 overflow-hidden">
+              <div className="bg-white rounded-3xl shadow-card-hover border border-slate-100 border-l-4 border-l-blue-600 overflow-hidden">
                 {/* Profile header */}
                 <div className="bg-gradient-to-br from-blue-600 to-blue-800 p-6 text-white">
                   <div className="flex items-start gap-4">
@@ -1002,9 +1227,17 @@ export function Login({ onSessionStarted }: Props) {
                   </div>
                 </div>
 
-                <div className="bg-slate-50 rounded-2xl p-3 mb-6 flex items-center gap-2 text-sm text-slate-600">
-                  <AlertCircle className="w-4 h-4 text-blue-500 shrink-0" />
-                  {t('phone.otp_sent')} <span className="font-bold text-slate-800 ml-1">{mobilePhoneHint}</span>
+                <div className="bg-slate-50 rounded-2xl p-3 mb-6 flex flex-col sm:flex-row items-center justify-between gap-2 text-sm text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="w-4 h-4 text-blue-500 shrink-0" />
+                    <span>{t('phone.otp_sent')} <span className="font-bold text-slate-800 ml-1">{mobilePhoneHint}</span></span>
+                  </div>
+                  {demoOtp && (
+                    <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-amber-50 border border-amber-200 text-amber-800 text-xs font-semibold rounded-full shadow-xs shrink-0">
+                      <span>Demo OTP:</span>
+                      <span className="font-mono font-bold tracking-widest text-amber-900">{demoOtp}</span>
+                    </span>
+                  )}
                 </div>
 
                 <div className="mb-6">
@@ -1061,7 +1294,7 @@ export function Login({ onSessionStarted }: Props) {
                     <LiquidButton
                       key={p.patient_id || idx}
                       onClick={() => { setSelectedPatient(p); setStep('DEPARTMENT'); }}
-                      className="flex items-center gap-3 p-4 border-2 border-slate-100 rounded-2xl hover:border-blue-500 hover:bg-blue-50 transition-all text-left"
+                      className="group flex items-center gap-3 p-4 border-2 border-slate-100 rounded-2xl hover:border-blue-500 hover:bg-blue-50/70 hover:shadow-card hover:-translate-y-0.5 active:scale-[0.97] transition-[transform,border-color,background-color,box-shadow] duration-150 text-left cursor-pointer"
                     >
                       <img
                         src={PFP_MAP[pfpIdx]}
@@ -1084,6 +1317,7 @@ export function Login({ onSessionStarted }: Props) {
                           </div>
                         )}
                       </div>
+                      <ChevronRight className="w-4 h-4 text-slate-400 group-hover:text-blue-600 group-hover:translate-x-0.5 transition-all shrink-0" />
                     </LiquidButton>
                   );
                 })}
@@ -1150,6 +1384,7 @@ export function Login({ onSessionStarted }: Props) {
                   <input
                     type="text"
                     value={regData.full_name || ''}
+                    placeholder={t('form.name_placeholder')}
                     onChange={e => setRegData({...regData, full_name: e.target.value})}
                     onFocus={() => speak('enter_name')}
                     disabled={!!abhaSourceProfile}
@@ -1166,6 +1401,7 @@ export function Login({ onSessionStarted }: Props) {
                     <input
                       type="number"
                       value={regData.age || ''}
+                      placeholder={t('form.age_placeholder')}
                       onChange={e => setRegData({...regData, age: parseInt(e.target.value) || undefined})}
                       onFocus={() => speak('enter_age')}
                       disabled={!!abhaSourceProfile}
@@ -1201,6 +1437,8 @@ export function Login({ onSessionStarted }: Props) {
                     <input
                       type="number"
                       value={regData.weight || ''}
+                      placeholder={t('form.weight_placeholder')}
+                      onFocus={() => speak('enter_weight')}
                       onChange={e => setRegData({ ...regData, weight: parseFloat(e.target.value) || undefined })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 focus:border-blue-500 outline-none transition-colors"
                     />
@@ -1213,6 +1451,8 @@ export function Login({ onSessionStarted }: Props) {
                     <input
                       type="text"
                       value={regData.height || ''}
+                      placeholder={t('form.height_placeholder')}
+                      onFocus={() => speak('enter_height')}
                       onChange={e => setRegData({ ...regData, height: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 focus:border-blue-500 outline-none transition-colors"
                     />
@@ -1256,6 +1496,8 @@ export function Login({ onSessionStarted }: Props) {
                   <input
                     type="text"
                     value={regData.address || ''}
+                    placeholder={t('form.address_placeholder')}
+                    onFocus={() => speak('enter_address')}
                     onChange={e => setRegData({ ...regData, address: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 focus:border-blue-500 outline-none transition-colors"
                   />
@@ -1334,10 +1576,10 @@ export function Login({ onSessionStarted }: Props) {
                     <LiquidButton
                       key={dept.dept_id || dept.name}
                       onClick={() => { setDepartment(dept.name); setSelectedDoctor(''); }}
-                      className={`py-3 px-4 rounded-xl border-2 font-semibold transition-all capitalize text-sm ${
+                      className={`py-3 px-4 rounded-xl border-2 font-semibold transition-[transform,border-color,background-color,box-shadow] duration-150 capitalize text-sm hover:-translate-y-0.5 active:scale-[0.97] cursor-pointer ${
                         department === dept.name
-                          ? 'border-blue-500 bg-blue-50 text-blue-700'
-                          : 'border-slate-100 hover:border-slate-300 text-slate-600'
+                          ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-xs ring-1 ring-blue-500/20'
+                          : 'border-slate-100 hover:border-slate-300 hover:bg-slate-50/80 text-slate-600 hover:shadow-2xs'
                       }`}
                     >
                       {dept.name}

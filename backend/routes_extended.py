@@ -30,62 +30,10 @@ extended_router = APIRouter()
 import time as _time
 import random as _random
 
-abdm_otp_store: dict[str, dict] = {}
-OTP_TTL_SECONDS = 300     # 5 minutes
-OTP_MAX_ATTEMPTS = 3
+from services.otp_provider import get_otp_provider, mask_phone as _mask_phone
 
-
-def send_real_sms_otp(phone_number: str, otp: str) -> None:
-    """
-    ════════════════════════════════════════════════════════════
-    PLACEHOLDER — INJECT FREE SMS GATEWAY CREDENTIALS HERE
-    ════════════════════════════════════════════════════════════
-
-    Option 1 — Fast2SMS (free tier, ~100 SMS/day):
-        import requests
-        requests.get("https://www.fast2sms.com/dev/bulkV2", params={
-            "authorization": os.getenv("FAST2SMS_API_KEY", ""),
-            "variables_values": otp,
-            "route": "otp",
-            "numbers": phone_number,
-        })
-
-    Option 2 — Twilio (trial, 15 USD credit):
-        from twilio.rest import Client
-        client = Client(os.getenv("TWILIO_ACCOUNT_SID"), os.getenv("TWILIO_AUTH_TOKEN"))
-        client.messages.create(
-            body=f"SwasthyaSync OTP: {otp}. Valid 5 min. DPDP Act 2023 compliant.",
-            from_=os.getenv("TWILIO_FROM_NUMBER"),
-            to=f"+91{phone_number}",
-        )
-
-    Option 3 — TextLocal (free 10 SMS trial):
-        import requests
-        requests.post("https://api.textlocal.in/send/", data={
-            "apikey": os.getenv("TEXTLOCAL_API_KEY", ""),
-            "numbers": f"91{phone_number}",
-            "message": f"SwasthyaSync OTP: {otp}. Valid 5 minutes.",
-            "sender": "SWASTH",
-        })
-
-    Add credentials to .env:
-        FAST2SMS_API_KEY=your_key_here
-        TWILIO_ACCOUNT_SID=...  TWILIO_AUTH_TOKEN=...  TWILIO_FROM_NUMBER=...
-        TEXTLOCAL_API_KEY=...
-    ════════════════════════════════════════════════════════════
-    """
-    # DEV MODE: Print to terminal so you can test without SMS credits
-    print(f"\n{'='*55}")
-    print(f"  [ABDM OTP]  Phone: +91{phone_number}  →  OTP: {otp}")
-    print(f"{'='*55}\n")
-
-
-def _mask_phone(phone: str) -> str:
-    """Returns 'XXXXXX1234' style masked phone for display."""
-    clean = phone.replace("+91", "").replace(" ", "").strip()
-    if len(clean) <= 4:
-        return "X" * len(clean)
-    return "X" * (len(clean) - 4) + clean[-4:]
+# Transaction context store (stores profile / path context only, NEVER raw OTP)
+abdm_context_store: dict[str, dict] = {}
 
 
 # ── ABDM Pydantic Models ──────────────────────────────────────────────
@@ -111,7 +59,7 @@ class MobileOtpConfirmReq(BaseModel):
 async def abdm_init(req: AbdmInitReq):
     """
     Path A Step 1: Patient enters their ABHA address.
-    Looks up the MOCK_ABHA_REGISTRY, generates OTP, sends SMS.
+    Looks up the MOCK_ABHA_REGISTRY, dispatches real/mock OTP via otp_provider.
     Returns transaction_id + masked phone hint.
     """
     from abdm_utils import lookup_by_abha_number
@@ -122,24 +70,24 @@ async def abdm_init(req: AbdmInitReq):
             "message": "ABHA Number not registered. Please use mobile number login.",
         })
 
-    otp = str(_random.randint(100000, 999999))
-    txn_id = uuid.uuid4().hex
+    provider = get_otp_provider()
+    result = await provider.send_otp(profile["mobile"], purpose="abha_login")
+    if not result.success:
+        status_code = 429 if result.error_code == "RATE_LIMITED" else (400 if result.error_code == "INVALID_PHONE" else 500)
+        raise HTTPException(status_code, detail={"code": result.error_code or "SEND_FAILED", "message": result.message})
 
-    abdm_otp_store[txn_id] = {
-        "otp": otp,
+    abdm_context_store[result.transaction_id] = {
         "profile": profile,
-        "expires_at": _time.time() + OTP_TTL_SECONDS,
         "path": "A",
-        "attempts": 0,
     }
-
-    send_real_sms_otp(profile["mobile"], otp)
-    logger.info(f"[ABDM/A] OTP issued for {req.abha_number} → txn={txn_id}")
+    logger.info(f"[ABDM/A] OTP requested for {req.abha_number} → txn={result.transaction_id}")
 
     return {
-        "transaction_id": txn_id,
-        "phone_hint": _mask_phone(profile["mobile"]),
-        "message": "OTP sent to registered mobile",
+        "transaction_id": result.transaction_id,
+        "phone_hint": result.phone_hint,
+        "message": result.message,
+        "resend_after_seconds": result.resend_after_seconds,
+        **({"debug_otp": result.debug_otp} if result.debug_otp else {}),
     }
 
 
@@ -147,32 +95,27 @@ async def abdm_init(req: AbdmInitReq):
 async def abdm_confirm(req: AbdmConfirmReq):
     """
     Path A Step 2: Patient enters OTP.
-    Validates it, returns the full normalized ABHA profile on success.
-    Profile contains pfp_index (1-4) for frontend picture assignment.
+    Validates via otp_provider, returns the full normalized ABHA profile on success.
     """
-    entry = abdm_otp_store.get(req.transaction_id)
+    entry = abdm_context_store.get(req.transaction_id)
     if not entry or entry.get("path") != "A":
         raise HTTPException(404, detail={"code": "TXN_NOT_FOUND", "message": "OTP expired or invalid transaction."})
 
-    if _time.time() > entry["expires_at"]:
-        abdm_otp_store.pop(req.transaction_id, None)
-        raise HTTPException(410, detail={"code": "OTP_EXPIRED", "message": "OTP has expired. Please request a new one."})
-
-    entry["attempts"] += 1
-    if entry["otp"] != req.otp:
-        remaining = OTP_MAX_ATTEMPTS - entry["attempts"]
-        if remaining <= 0:
-            abdm_otp_store.pop(req.transaction_id, None)
-            raise HTTPException(429, detail={"code": "MAX_ATTEMPTS", "message": "Too many incorrect attempts. Please restart."})
-        raise HTTPException(401, detail={
-            "code": "INVALID_OTP",
-            "message": f"Incorrect OTP. {remaining} attempt(s) remaining.",
-            "attempts_remaining": remaining,
-        })
+    provider = get_otp_provider()
+    verify_result = await provider.verify_otp(req.transaction_id, req.otp, purpose="abha_login")
+    if not verify_result.success:
+        raise HTTPException(
+            verify_result.status_code,
+            detail={
+                "code": verify_result.error_code or "INVALID_OTP",
+                "message": verify_result.error_message or "Incorrect OTP.",
+                "attempts_remaining": verify_result.attempts_remaining,
+            }
+        )
 
     profile = entry["profile"]
-    abdm_otp_store.pop(req.transaction_id, None)   # Single-use: delete immediately
-    logger.info(f"[ABDM/A] OTP confirmed. Profile: {profile['name']} | pfp={profile['pfp_index']}")
+    abdm_context_store.pop(req.transaction_id, None)   # Single-use: delete context immediately
+    logger.info(f"[ABDM/A] OTP confirmed for {profile['name']}")
 
     return {
         "status": "success",
@@ -184,31 +127,26 @@ async def abdm_confirm(req: AbdmConfirmReq):
 async def mobile_otp_init(req: MobileOtpInitReq):
     """
     Path B Step 1: Walk-in patient enters their mobile number.
-    Generates OTP and sends SMS.
+    Dispatches OTP via otp_provider.
     Returns transaction_id + masked phone hint.
     """
-    phone = req.phone.replace("+91", "").replace(" ", "").strip()
-    if len(phone) < 10 or not phone.isdigit():
-        raise HTTPException(400, detail={"message": "Invalid phone number. Enter 10 digits."})
+    provider = get_otp_provider()
+    result = await provider.send_otp(req.phone, purpose="mobile_login")
+    if not result.success:
+        status_code = 429 if result.error_code == "RATE_LIMITED" else (400 if result.error_code == "INVALID_PHONE" else 500)
+        raise HTTPException(status_code, detail={"code": result.error_code or "SEND_FAILED", "message": result.message})
 
-    otp = str(_random.randint(100000, 999999))
-    txn_id = uuid.uuid4().hex
-
-    abdm_otp_store[txn_id] = {
-        "otp": otp,
-        "phone": phone,
-        "expires_at": _time.time() + OTP_TTL_SECONDS,
+    abdm_context_store[result.transaction_id] = {
         "path": "B",
-        "attempts": 0,
     }
-
-    send_real_sms_otp(phone, otp)
-    logger.info(f"[ABDM/B] OTP issued for {_mask_phone(phone)} → txn={txn_id}")
+    logger.info(f"[ABDM/B] OTP requested for {_mask_phone(req.phone)} → txn={result.transaction_id}")
 
     return {
-        "transaction_id": txn_id,
-        "phone_hint": _mask_phone(phone),
-        "message": "OTP sent to your mobile",
+        "transaction_id": result.transaction_id,
+        "phone_hint": result.phone_hint,
+        "message": result.message,
+        "resend_after_seconds": result.resend_after_seconds,
+        **({"debug_otp": result.debug_otp} if result.debug_otp else {}),
     }
 
 
@@ -217,31 +155,25 @@ async def mobile_otp_confirm(req: MobileOtpConfirmReq):
     """
     Path B Step 2: Patient enters OTP for their mobile.
     On success: returns verified phone + existing patients list.
-    Empty patients list → go to REGISTER.
-    Non-empty patients list → go to SELECT_MEMBER.
     """
-    entry = abdm_otp_store.get(req.transaction_id)
+    entry = abdm_context_store.get(req.transaction_id)
     if not entry or entry.get("path") != "B":
         raise HTTPException(404, detail={"code": "TXN_NOT_FOUND", "message": "OTP expired or invalid transaction."})
 
-    if _time.time() > entry["expires_at"]:
-        abdm_otp_store.pop(req.transaction_id, None)
-        raise HTTPException(410, detail={"code": "OTP_EXPIRED", "message": "OTP has expired. Please request a new one."})
+    provider = get_otp_provider()
+    verify_result = await provider.verify_otp(req.transaction_id, req.otp, purpose="mobile_login")
+    if not verify_result.success:
+        raise HTTPException(
+            verify_result.status_code,
+            detail={
+                "code": verify_result.error_code or "INVALID_OTP",
+                "message": verify_result.error_message or "Incorrect OTP.",
+                "attempts_remaining": verify_result.attempts_remaining,
+            }
+        )
 
-    entry["attempts"] += 1
-    if entry["otp"] != req.otp:
-        remaining = OTP_MAX_ATTEMPTS - entry["attempts"]
-        if remaining <= 0:
-            abdm_otp_store.pop(req.transaction_id, None)
-            raise HTTPException(429, detail={"code": "MAX_ATTEMPTS", "message": "Too many incorrect attempts. Please restart."})
-        raise HTTPException(401, detail={
-            "code": "INVALID_OTP",
-            "message": f"Incorrect OTP. {remaining} attempt(s) remaining.",
-            "attempts_remaining": remaining,
-        })
-
-    phone = entry["phone"]
-    abdm_otp_store.pop(req.transaction_id, None)   # Single-use
+    phone = verify_result.phone
+    abdm_context_store.pop(req.transaction_id, None)   # Single-use
     logger.info(f"[ABDM/B] Phone {_mask_phone(phone)} verified.")
 
     # Fetch existing patients linked to this phone
@@ -707,8 +639,8 @@ async def get_summary_pdf(session_id: str):
                         path=storage_path,
                         file_options={"content-type": "application/pdf"}
                     )
-                    url_resp = supabase.storage.from_("patient-records").create_signed_url(storage_path, 2592000)
-                    pdf_path = url_resp.get("signedURL", storage_path)
+                    url_resp = supabase.storage.from_("patient-records").get_public_url(storage_path)
+                    pdf_path = url_resp
                 except Exception as e:
                     import logging
                     logging.getLogger(__name__).error(f"Supabase upload error for PDF: {e}")

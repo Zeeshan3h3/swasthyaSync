@@ -21,6 +21,19 @@ export const translations: Record<UILanguage, Record<string, string>> = {
     "consent.agree_proceed": "I Agree & Proceed",
     "consent.accept_all": "Please accept all consents above",
 
+    // ── Workflow / Branding (Left Panel) ──
+    "workflow.gov_kiosk": "Government Hospital Kiosk",
+    "workflow.tagline": "Smart Kiosk, Better Care",
+    "workflow.how_it_works": "How your visit works",
+    "workflow.step1_title": "AI-Powered Interview",
+    "workflow.step1_desc": "Talk to our friendly voice assistant about your symptoms, in your own language.",
+    "workflow.step2_title": "Smart Document Scanning",
+    "workflow.step2_desc": "Upload old prescriptions or lab reports — we read them automatically.",
+    "workflow.step3_title": "Safety First",
+    "workflow.step3_desc": "Critical symptoms are instantly flagged to nursing staff — no waiting for emergencies.",
+    "workflow.step4_title": "Doctor Handoff",
+    "workflow.step4_desc": "Get your queue token; your doctor already has your full summary when you walk in.",
+
     // ── Landing Page ──
     "landing.dpdp_notice": "By proceeding, you grant explicit consent to fetch your health profile under the DPDP Act 2023 and the National Digital Health Mission.",
     "landing.abha_tag": "ABHA",
@@ -122,6 +135,8 @@ export const translations: Record<UILanguage, Record<string, string>> = {
     "interview.type_response": "Tap here to type your response...",
     "interview.release_to_send": "Release to Send",
     "interview.hold_to_speak": "Hold to Speak",
+    "interview.you": "You (Patient)",
+    "interview.ai_doctor": "Swasthya AI",
 
     // ── Verification ──
     "verify.title": "Review Extracted Data",
@@ -198,6 +213,19 @@ export const translations: Record<UILanguage, Record<string, string>> = {
     "consent.encrypted_notice": "आपका डेटा एन्क्रिप्टेड और सुरक्षित रूप से संग्रहीत है। आप किसी भी समय सहमति वापस ले सकते हैं।",
     "consent.agree_proceed": "मैं सहमत हूँ, आगे बढ़ें",
     "consent.accept_all": "कृपया ऊपर सभी सहमतियाँ स्वीकार करें",
+
+    // ── Workflow / Branding (Left Panel) ──
+    "workflow.gov_kiosk": "सरकारी अस्पताल कियोस्क",
+    "workflow.tagline": "स्मार्ट कियोस्क, बेहतर देखभाल",
+    "workflow.how_it_works": "आपकी विज़िट कैसे काम करती है",
+    "workflow.step1_title": "AI-संचालित इंटरव्यू",
+    "workflow.step1_desc": "अपनी भाषा में हमारे वॉयस असिस्टेंट से अपने लक्षणों के बारे में बात करें।",
+    "workflow.step2_title": "स्मार्ट दस्तावेज़ स्कैनिंग",
+    "workflow.step2_desc": "पुराने प्रिस्क्रिप्शन या लैब रिपोर्ट अपलोड करें — हम उन्हें स्वचालित रूप से पढ़ते हैं।",
+    "workflow.step3_title": "सुरक्षा पहले",
+    "workflow.step3_desc": "गंभीर लक्षणों को तुरंत नर्सिंग स्टाफ को फ्लैग किया जाता है — आपात स्थिति के लिए कोई प्रतीक्षा नहीं।",
+    "workflow.step4_title": "डॉक्टर हैंडऑफ़",
+    "workflow.step4_desc": "अपना कतार टोकन प्राप्त करें; जब आप अंदर जाते हैं तो आपके डॉक्टर के पास पहले से ही आपका पूरा सारांश होता है।",
 
     // ── Landing Page ──
     "landing.dpdp_notice": "आगे बढ़ने पर, आप DPDP अधिनियम 2023 और राष्ट्रीय डिजिटल स्वास्थ्य मिशन के तहत अपनी स्वास्थ्य प्रोफ़ाइल प्राप्त करने की स्पष्ट सहमति देते हैं।",
@@ -300,6 +328,8 @@ export const translations: Record<UILanguage, Record<string, string>> = {
     "interview.type_response": "अपना उत्तर टाइप करने के लिए यहाँ टैप करें...",
     "interview.release_to_send": "भेजने के लिए छोड़ें",
     "interview.hold_to_speak": "बोलने के लिए दबाए रखें",
+    "interview.you": "आप (मरीज़)",
+    "interview.ai_doctor": "स्वास्थ्य AI",
 
     // ── Verification ──
     "verify.title": "निकाले गए डेटा की समीक्षा करें",
@@ -376,6 +406,19 @@ export const translations: Record<UILanguage, Record<string, string>> = {
     "consent.encrypted_notice": "আপনার তথ্য এনক্রিপ্টেড এবং নিরাপদভাবে সংরক্ষিত। আপনি যেকোনো সময় সম্মতি প্রত্যাহার করতে পারেন।",
     "consent.agree_proceed": "আমি সম্মত, এগিয়ে যান",
     "consent.accept_all": "উপরের সমস্ত সম্মতি গ্রহণ করুন",
+
+    // ── Workflow / Branding (Left Panel) ──
+    "workflow.gov_kiosk": "সরকারি হাসপাতাল কিয়স্ক",
+    "workflow.tagline": "স্মার্ট কিয়স্ক, উন্নত চিকিৎসা",
+    "workflow.how_it_works": "আপনার ভিজিট কীভাবে কাজ করে",
+    "workflow.step1_title": "এআই-চালিত সাক্ষাৎকার",
+    "workflow.step1_desc": "আপনার নিজের ভাষায় আমাদের ভয়েস সহকারীর সাথে আপনার উপসর্গ সম্পর্কে কথা বলুন।",
+    "workflow.step2_title": "স্মার্ট ডকুমেন্ট স্ক্যানিং",
+    "workflow.step2_desc": "পুরানো প্রেসক্রিপশন বা ল্যাব রিপোর্ট আপলোড করুন — আমরা স্বয়ংক্রিয়ভাবে সেগুলি পড়ি।",
+    "workflow.step3_title": "নিরাপত্তা সবার আগে",
+    "workflow.step3_desc": "গুরুতর উপসর্গগুলি অবিলম্বে নার্সিং স্টাফদের কাছে ফ্ল্যাগ করা হয় — জরুরি অবস্থার জন্য কোনও অপেক্ষা নেই।",
+    "workflow.step4_title": "ডাক্তার হ্যান্ডঅফ",
+    "workflow.step4_desc": "আপনার কিউ টোকেন পান; আপনি যখন প্রবেশ করবেন তখন আপনার ডাক্তারের কাছে ইতিমধ্যেই আপনার সম্পূর্ণ সারাংশ থাকবে।",
 
     // ── Landing Page ──
     "landing.dpdp_notice": "এগিয়ে যাওয়ার মাধ্যমে, আপনি DPDP আইন 2023 এবং জাতীয় ডিজিটাল স্বাস্থ্য মিশনের অধীনে আপনার স্বাস্থ্য প্রোফাইল আনতে স্পষ্ট সম্মতি দিচ্ছেন।",
@@ -478,6 +521,8 @@ export const translations: Record<UILanguage, Record<string, string>> = {
     "interview.type_response": "আপনার উত্তর টাইপ করতে এখানে আলতো চাপুন...",
     "interview.release_to_send": "পাঠানোর জন্য ছেড়ে দিন",
     "interview.hold_to_speak": "কথা বলার জন্য ধরে রাখুন",
+    "interview.you": "আপনি (রোগী)",
+    "interview.ai_doctor": "স্বাস্থ্য AI",
 
     // ── Verification ──
     "verify.title": "নিষ্কাশিত তথ্য পর্যালোচনা করুন",

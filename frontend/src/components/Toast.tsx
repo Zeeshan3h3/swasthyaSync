@@ -32,9 +32,10 @@ export const ToastContainer: React.FC = () => {
   useEffect(() => {
     const listener = (toast: ToastMessage) => {
       setToasts(prev => [...prev, toast]);
+      const duration = toast.type === 'error' ? 6000 : 4000;
       setTimeout(() => {
         setToasts(prev => prev.filter(t => t.id !== toast.id));
-      }, 4000);
+      }, duration);
     };
     listeners.push(listener);
     return () => {
@@ -43,8 +44,8 @@ export const ToastContainer: React.FC = () => {
   }, []);
 
   return (
-    <div className="fixed top-24 right-4 z-50 flex flex-col gap-2 pointer-events-none">
-      <AnimatePresence>
+    <div className="fixed top-20 right-4 z-50 flex flex-col gap-2.5 pointer-events-none">
+      <AnimatePresence mode="popLayout">
         {toasts.map(t => (
           <ToastItem key={t.id} toast={t} reducedMotion={prefersReducedMotion} onDismiss={() => setToasts(prev => prev.filter(item => item.id !== t.id))} />
         ))}
@@ -56,28 +57,35 @@ export const ToastContainer: React.FC = () => {
 const ToastItem: React.FC<{ toast: ToastMessage, reducedMotion: boolean, onDismiss: () => void }> = ({ toast, reducedMotion, onDismiss }) => {
   const borderColor = toast.type === 'success' ? 'border-l-teal-600' : toast.type === 'error' ? 'border-l-red-600' : 'border-l-blue-600';
   const progressColor = toast.type === 'success' ? 'bg-teal-600' : toast.type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+  const duration = toast.type === 'error' ? 6 : 4;
 
   const motionProps = reducedMotion ? {} : {
-    initial: { x: 100, opacity: 0 },
-    animate: { x: 0, opacity: 1 },
-    exit: { x: 100, opacity: 0 },
-    transition: { type: 'spring' as const, stiffness: 400, damping: 25 }
+    initial: { x: 80, opacity: 0, scale: 0.96 },
+    animate: { x: 0, opacity: 1, scale: 1 },
+    exit: { x: 80, opacity: 0, scale: 0.96 },
+    transition: { type: 'spring' as const, stiffness: 350, damping: 28 },
+    drag: "x" as const,
+    dragConstraints: { left: 0, right: 120 },
+    onDragEnd: (_: unknown, info: { offset: { x: number } }) => {
+      if (info.offset.x > 60) onDismiss();
+    }
   };
 
   return (
     <motion.div
       {...motionProps}
-      className={`pointer-events-auto bg-white shadow-lg rounded-md border border-slate-200 border-l-4 ${borderColor} p-4 w-72 relative overflow-hidden`}
+      layout
+      className={`pointer-events-auto bg-white/95 backdrop-blur-md shadow-card-hover rounded-lg border border-slate-200/80 border-l-4 ${borderColor} p-3.5 w-76 relative overflow-hidden cursor-grab active:cursor-grabbing select-none`}
       onClick={onDismiss}
     >
-      <p className="text-sm font-medium text-slate-800">{toast.message}</p>
+      <p className="text-xs sm:text-sm font-semibold text-slate-800 pr-2 leading-snug">{toast.message}</p>
       
       {/* Progress bar */}
       <motion.div 
-        className={`absolute bottom-0 left-0 h-1 ${progressColor}`}
+        className={`absolute bottom-0 left-0 h-0.5 ${progressColor}`}
         initial={reducedMotion ? { width: 0 } : { width: '100%' }}
         animate={{ width: '0%' }}
-        transition={{ duration: 4, ease: 'linear' }}
+        transition={{ duration, ease: 'linear' }}
       />
     </motion.div>
   );

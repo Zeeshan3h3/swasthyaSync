@@ -1,6 +1,7 @@
 import json
 import uuid
 import random
+import asyncio
 from datetime import datetime, timezone
 import logging
 import os
@@ -19,7 +20,14 @@ async def init_db_pool():
     if not db_url:
         logger.error("SUPABASE_DB_URL is missing. DB won't work.")
         return
-    _pool = await asyncpg.create_pool(db_url, min_size=1, max_size=5)
+    _pool = await asyncpg.create_pool(
+        db_url,
+        min_size=2,
+        max_size=20,
+        max_inactive_connection_lifetime=60.0,
+        command_timeout=30.0,
+        statement_cache_size=0,
+    )
     async with _pool.acquire() as conn:
         try:
             await conn.execute("ALTER TABLE patients ADD COLUMN IF NOT EXISTS vitals TEXT")
@@ -264,7 +272,10 @@ async def fetch_triage_queue(doctor_id: str = None) -> list[dict]:
                    ps.department, ps.nurse_triage_notes
             FROM patient_sessions ps
             JOIN patients p ON ps.patient_id = p.patient_id
-            WHERE (ps.created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+            WHERE (
+                (ps.created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+                OR (ps.session_status IN ('WAITING', 'IN_PROGRESS') AND ps.created_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')
+            )
         """
         params = []
         if doctor_id:
@@ -340,6 +351,69 @@ async def fetch_doctor_encounter(session_id: str) -> dict:
         return encounter_data
 
 # -----------------------------------------------------------------------------
+# PORTAL / MOBILE APP HELPER FUNCTIONS (Phase 3 & 4)
+# -----------------------------------------------------------------------------
+
+async def fetch_patient_history_by_identifier(identifier: str) -> list[dict]:
+    """Returns past consultations for the patient."""
+    if not _pool: return []
+    async with _pool.acquire() as conn:
+        records = await conn.fetch("""
+            SELECT ps.session_id, ps.completed_at, ps.department,
+                   d.full_name as doctor_name, cs.pdf_file_path
+            FROM patient_sessions ps
+            JOIN patients p ON ps.patient_id = p.patient_id
+            LEFT JOIN clinical_summaries cs ON ps.session_id = cs.session_id
+            LEFT JOIN doctors d ON ps.doctor_id = d.doctor_id
+            WHERE (p.abha_id = $1 OR p.phone_number = $1)
+              AND ps.session_status = 'COMPLETED'
+            ORDER BY ps.completed_at DESC
+        """, identifier)
+        return [dict(r) for r in records]
+
+async def fetch_patient_documents_by_identifier(identifier: str) -> list[dict]:
+    """Returns previously uploaded documents for the patient."""
+    if not _pool: return []
+    async with _pool.acquire() as conn:
+        records = await conn.fetch("""
+            SELECT ud.document_id, ud.file_path, ud.document_type, ud.created_at
+            FROM uploaded_documents ud
+            JOIN patient_sessions ps ON ud.session_id = ps.session_id
+            JOIN patients p ON ps.patient_id = p.patient_id
+            WHERE (p.abha_id = $1 OR p.phone_number = $1)
+            ORDER BY ud.created_at DESC
+        """, identifier)
+        return [dict(r) for r in records]
+
+async def fetch_latest_clinical_record(identifier: str) -> dict | None:
+    """Returns the most recent JSON clinical record and notes for RAG AI."""
+    if not _pool: return None
+    async with _pool.acquire() as conn:
+        row = await conn.fetchrow("""
+            SELECT cs.full_detailed_summary, cs.doctor_consultation_notes
+            FROM clinical_summaries cs
+            JOIN patient_sessions ps ON cs.session_id = ps.session_id
+            JOIN patients p ON ps.patient_id = p.patient_id
+            WHERE (p.abha_id = $1 OR p.phone_number = $1)
+              AND ps.session_status = 'COMPLETED'
+            ORDER BY ps.completed_at DESC
+            LIMIT 1
+        """, identifier)
+        if not row:
+            return None
+            
+        result = dict(row)
+        # Handle stringified JSONB fallback
+        val = result.get("full_detailed_summary")
+        if isinstance(val, str):
+            try:
+                result["full_detailed_summary"] = json.loads(val)
+            except json.JSONDecodeError:
+                result["full_detailed_summary"] = {}
+        
+        return result
+
+# -----------------------------------------------------------------------------
 # ADMIN PANEL HELPER FUNCTIONS
 # -----------------------------------------------------------------------------
 
@@ -370,18 +444,29 @@ async def add_department(name: str):
 
 async def get_doctors() -> list[dict]:
     if not _pool: return []
-    async with _pool.acquire() as conn:
-        records = await conn.fetch("""
-            SELECT 
-                d.doctor_id, d.full_name, d.license_number, d.profile_image_url, 
-                d.max_daily_patients, d.status, d.room_number, d.dept_id, d.username, d.password, d.current_status, dept.name as dept_name,
-                (SELECT COUNT(*) FROM patient_sessions ps 
-                 WHERE ps.department = dept.name 
-                 AND (ps.created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) as total_seen_today
-            FROM doctors d
-            LEFT JOIN departments dept ON d.dept_id = dept.dept_id
-        """)
-        return [dict(r) for r in records]
+    for attempt in range(2):
+        try:
+            async with _pool.acquire() as conn:
+                records = await conn.fetch("""
+                    SELECT 
+                        d.doctor_id, d.full_name, d.license_number, d.profile_image_url, 
+                        d.max_daily_patients, d.status, d.room_number, d.dept_id, d.username, d.password, d.current_status, dept.name as dept_name,
+                        (SELECT COUNT(*) FROM patient_sessions ps 
+                         WHERE ps.department = dept.name 
+                         AND (ps.created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date) as total_seen_today
+                    FROM doctors d
+                    LEFT JOIN departments dept ON d.dept_id = dept.dept_id
+                """)
+                return [dict(r) for r in records]
+        except (asyncpg.ConnectionDoesNotExistError, asyncpg.InterfaceError, ConnectionResetError) as e:
+            logger.warning(f"Connection dropped in get_doctors (attempt {attempt+1}): {e}")
+            if attempt == 1:
+                return []
+            await asyncio.sleep(0.2)
+        except Exception as e:
+            logger.error(f"Error fetching doctors: {e}")
+            return []
+    return []
 
 async def add_doctor(full_name: str, dept_id: int, license_number: str, max_daily_patients: int = 40, profile_image_url: str = None, room_number: str = "TBD", username: str = None, password: str = None):
     import uuid
@@ -495,3 +580,236 @@ async def update_patient_details(patient_id: str, updates: dict, admin_email: st
     async with _pool.acquire() as conn:
         await conn.execute(query, *values)
     await log_system_action(admin_email, "PATIENT_EDIT", patient_id)
+
+async def get_health_officer_export_data() -> dict:
+    if not _pool: return {"patients": [], "patient_sessions": [], "clinical_summaries": []}
+    async with _pool.acquire() as conn:
+        patients_records = await conn.fetch("SELECT * FROM patients")
+        sessions_records = await conn.fetch("SELECT * FROM patient_sessions")
+        summaries_records = await conn.fetch("SELECT * FROM clinical_summaries")
+        
+        def serialize_record(record):
+            r = dict(record)
+            for k, v in r.items():
+                if isinstance(v, datetime):
+                    r[k] = v.isoformat()
+            return r
+            
+        return {
+            "patients": [serialize_record(p) for p in patients_records],
+            "patient_sessions": [serialize_record(s) for s in sessions_records],
+            "clinical_summaries": [serialize_record(s) for s in summaries_records]
+        }
+
+# -----------------------------------------------------------------------------
+# ANALYTICS DASHBOARD
+# -----------------------------------------------------------------------------
+
+async def get_dashboard_data(start_date: str = None, end_date: str = None,
+                             departments: list = None, complaints: list = None) -> dict:
+    """Single comprehensive query for the analytics dashboard.
+    All filters are optional — omitted filters mean 'all'."""
+    if not _pool:
+        return {"kpi": {}, "sparklines": {}, "footfall_by_date": [], "department_breakdown": [],
+                "complaint_breakdown": [], "red_flags_over_time": []}
+
+    async with _pool.acquire() as conn:
+        # Build WHERE clause fragments
+        conditions = []
+        params = []
+        idx = 1
+
+        if start_date:
+            conditions.append(f"(ps.created_at AT TIME ZONE 'Asia/Kolkata')::date >= ${idx}::date")
+            params.append(datetime.strptime(start_date, '%Y-%m-%d').date())
+            idx += 1
+        if end_date:
+            conditions.append(f"(ps.created_at AT TIME ZONE 'Asia/Kolkata')::date <= ${idx}::date")
+            params.append(datetime.strptime(end_date, '%Y-%m-%d').date())
+            idx += 1
+        if departments:
+            conditions.append(f"ps.department = ANY(${idx}::text[])")
+            params.append(departments)
+            idx += 1
+        if complaints:
+            conditions.append(f"ps.chief_complaint = ANY(${idx}::text[])")
+            params.append(complaints)
+            idx += 1
+
+        where = (" WHERE " + " AND ".join(conditions)) if conditions else ""
+
+        # ── KPI: Total footfall in range ──
+        total_footfall = await conn.fetchval(
+            f"SELECT COUNT(*) FROM patient_sessions ps{where}", *params) or 0
+
+        # ── KPI: Today's footfall (ignores filters) ──
+        today_footfall = await conn.fetchval(
+            "SELECT COUNT(*) FROM patient_sessions WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date"
+        ) or 0
+
+        # ── KPI: Avg intake time (minutes) in range ──
+        avg_intake = await conn.fetchval(
+            f"""SELECT AVG(EXTRACT(EPOCH FROM (ps.completed_at - ps.created_at)) / 60)
+                FROM patient_sessions ps{where} AND ps.session_status = 'COMPLETED' AND ps.completed_at IS NOT NULL"""
+            if where else
+            """SELECT AVG(EXTRACT(EPOCH FROM (ps.completed_at - ps.created_at)) / 60)
+               FROM patient_sessions ps WHERE ps.session_status = 'COMPLETED' AND ps.completed_at IS NOT NULL""",
+            *params
+        )
+        avg_intake = round(float(avg_intake), 1) if avg_intake else 0
+
+        # ── KPI: Priority count in range ──
+        priority_q = f"SELECT COUNT(*) FROM patient_sessions ps{where}"
+        if where:
+            priority_q += " AND ps.priority_flag = TRUE"
+        else:
+            priority_q += " WHERE ps.priority_flag = TRUE"
+        priority_count = await conn.fetchval(priority_q, *params) or 0
+
+        # ── KPI: Documents OCR'd + avg confidence ──
+        docs_count = await conn.fetchval("SELECT COUNT(*) FROM uploaded_documents") or 0
+
+        # ── Sparklines: last 7 days (ignores filters for simplicity) ──
+        sparkline_rows = await conn.fetch("""
+            SELECT (created_at AT TIME ZONE 'Asia/Kolkata')::date as d, COUNT(*) as c
+            FROM patient_sessions
+            WHERE (created_at AT TIME ZONE 'Asia/Kolkata')::date >= (CURRENT_DATE - INTERVAL '6 days')
+            GROUP BY d ORDER BY d
+        """)
+        footfall_7d = [int(r["c"]) for r in sparkline_rows]
+
+        priority_sparkline = await conn.fetch("""
+            SELECT (created_at AT TIME ZONE 'Asia/Kolkata')::date as d, COUNT(*) as c
+            FROM patient_sessions
+            WHERE priority_flag = TRUE
+              AND (created_at AT TIME ZONE 'Asia/Kolkata')::date >= (CURRENT_DATE - INTERVAL '6 days')
+            GROUP BY d ORDER BY d
+        """)
+        priority_7d = [int(r["c"]) for r in priority_sparkline]
+
+        # ── Footfall by date (for main chart) ──
+        footfall_rows = await conn.fetch(
+            f"""SELECT (ps.created_at AT TIME ZONE 'Asia/Kolkata')::date as date,
+                       ps.department, COUNT(*) as count
+                FROM patient_sessions ps{where}
+                GROUP BY date, ps.department
+                ORDER BY date""",
+            *params
+        )
+        footfall_by_date = [{"date": str(r["date"]), "department": r["department"] or "Unknown", "count": int(r["count"])} for r in footfall_rows]
+
+        # ── Department breakdown ──
+        dept_rows = await conn.fetch(
+            f"""SELECT ps.department, COUNT(*) as count
+                FROM patient_sessions ps{where}
+                GROUP BY ps.department ORDER BY count DESC""",
+            *params
+        )
+        department_breakdown = [{"department": r["department"] or "Unknown", "count": int(r["count"])} for r in dept_rows]
+
+        # ── Complaint breakdown (top 10 + Other) ──
+        complaint_rows = await conn.fetch(
+            f"""SELECT ps.chief_complaint, COUNT(*) as count
+                FROM patient_sessions ps{where}
+                {"AND" if where else "WHERE"} ps.chief_complaint IS NOT NULL AND ps.chief_complaint != ''
+                GROUP BY ps.chief_complaint ORDER BY count DESC LIMIT 10""",
+            *params
+        )
+        complaint_breakdown = [{"complaint": r["chief_complaint"], "count": int(r["count"])} for r in complaint_rows]
+
+        # ── Red flags over time ──
+        rf_rows = await conn.fetch(
+            f"""SELECT (ps.created_at AT TIME ZONE 'Asia/Kolkata')::date as date,
+                       ps.priority_reason, COUNT(*) as count
+                FROM patient_sessions ps{where}
+                {"AND" if where else "WHERE"} ps.priority_flag = TRUE
+                GROUP BY date, ps.priority_reason
+                ORDER BY date""",
+            *params
+        )
+        # Classify source: if priority_reason contains 'document' or 'lab' or 'ocr' → document, else conversational
+        red_flags_over_time = []
+        for r in rf_rows:
+            reason = (r["priority_reason"] or "").lower()
+            source = "document" if any(kw in reason for kw in ["document", "lab", "ocr", "troponin", "creatinine"]) else "conversational"
+            red_flags_over_time.append({"date": str(r["date"]), "source": source, "count": int(r["count"])})
+
+        return {
+            "kpi": {
+                "total_footfall_range": total_footfall,
+                "today_footfall": today_footfall,
+                "avg_intake_minutes": avg_intake,
+                "priority_count_range": priority_count,
+                "docs_ocrd": docs_count,
+            },
+            "sparklines": {
+                "footfall_7d": footfall_7d,
+                "priority_7d": priority_7d,
+            },
+            "footfall_by_date": footfall_by_date,
+            "department_breakdown": department_breakdown,
+            "complaint_breakdown": complaint_breakdown,
+            "red_flags_over_time": red_flags_over_time,
+        }
+
+
+async def get_active_red_flags() -> list:
+    """Returns all currently-flagged patients in today's OPD."""
+    if not _pool: return []
+    async with _pool.acquire() as conn:
+        rows = await conn.fetch("""
+            SELECT ps.session_id, ps.token_id, ps.priority_reason, ps.department,
+                   ps.chief_complaint, ps.created_at, ps.session_status,
+                   p.full_name, p.age, p.gender
+            FROM patient_sessions ps
+            JOIN patients p ON ps.patient_id = p.patient_id
+            WHERE ps.priority_flag = TRUE
+              AND (ps.created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
+            ORDER BY ps.created_at DESC
+        """)
+        result = []
+        for r in rows:
+            d = dict(r)
+            if isinstance(d.get("created_at"), datetime):
+                d["created_at"] = d["created_at"].isoformat()
+            result.append(d)
+        return result
+
+
+async def get_impact_metrics() -> dict:
+    """Computes real impact numbers from actual session data."""
+    if not _pool: return {}
+    async with _pool.acquire() as conn:
+        total_completed = await conn.fetchval(
+            "SELECT COUNT(*) FROM patient_sessions WHERE session_status = 'COMPLETED'"
+        ) or 0
+
+        avg_intake = await conn.fetchval("""
+            SELECT AVG(EXTRACT(EPOCH FROM (completed_at - created_at)) / 60)
+            FROM patient_sessions
+            WHERE session_status = 'COMPLETED' AND completed_at IS NOT NULL
+        """)
+        avg_intake_min = round(float(avg_intake), 1) if avg_intake else 0
+
+        total_patients = await conn.fetchval("SELECT COUNT(*) FROM patients") or 0
+        total_sessions = await conn.fetchval("SELECT COUNT(*) FROM patient_sessions") or 0
+        total_docs = await conn.fetchval("SELECT COUNT(*) FROM uploaded_documents") or 0
+        total_red_flags = await conn.fetchval(
+            "SELECT COUNT(*) FROM patient_sessions WHERE priority_flag = TRUE"
+        ) or 0
+
+        # Estimated savings: assume 15min manual intake → our avg intake = savings per patient
+        manual_estimate_min = 15
+        savings_per_patient = max(0, manual_estimate_min - avg_intake_min)
+        total_hours_saved = round((savings_per_patient * total_completed) / 60, 1)
+
+        return {
+            "total_patients": total_patients,
+            "total_sessions": total_sessions,
+            "total_completed": total_completed,
+            "avg_intake_minutes": avg_intake_min,
+            "total_docs_ocrd": total_docs,
+            "total_red_flags_caught": total_red_flags,
+            "estimated_hours_saved": total_hours_saved,
+            "savings_per_patient_min": round(savings_per_patient, 1),
+        }

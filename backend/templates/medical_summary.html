@@ -6,27 +6,27 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
-            --navy: #0d2b52;
-            --navy-2: #163f73;
-            --red: #c8112b;
-            --ink: #1b2330;
-            --muted: #5c6672;
-            --hairline: #d9dee6;
-            --surface: #f6f8fa;
-            --chip-ai-bg: #e7effb;
-            --chip-ai-text: #0d2b52;
-            --chip-ocr-bg: #fdeee0;
-            --chip-ocr-text: #9a5300;
-            --chip-doc-bg: #e9f5ec;
-            --chip-doc-text: #1e6b3a;
-            --danger-bg: #fdecec;
-            --danger-border: #c8112b;
+            --navy: #0f172a;
+            --navy-2: #1e293b;
+            --brand-accent: #2563eb;
+            --ink: #334155;
+            --muted: #64748b;
+            --hairline: #e2e8f0;
+            --surface: #f8fafc;
+            --chip-ai-bg: #eff6ff;
+            --chip-ai-text: #1d4ed8;
+            --chip-ocr-bg: #f8fafc;
+            --chip-ocr-text: #475569;
+            --chip-doc-bg: #f0fdf4;
+            --chip-doc-text: #15803d;
+            --danger-bg: #fef2f2;
+            --danger-border: #ef4444;
         }
 
         @page { size: A4; margin: 0; }
 
         body {
-            font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif;
+            font-family: 'Inter', 'Noto Sans', 'Helvetica Neue', Helvetica, Arial, sans-serif;
             color: var(--ink);
             background-color: #ffffff;
             font-size: 11px;
@@ -51,7 +51,7 @@
         .brand-bar {
             height: 5px;
             border-radius: 3px;
-            background: linear-gradient(90deg, var(--navy) 0%, var(--navy-2) 55%, var(--red) 100%);
+            background: linear-gradient(90deg, var(--brand-accent) 0%, var(--navy-2) 55%, var(--navy) 100%);
             margin-bottom: 9px;
         }
         .doc-header {
@@ -67,7 +67,7 @@
         .logo-fallback { width: 42px; height: 42px; flex-shrink: 0; }
         .wordmark { display: flex; flex-direction: column; line-height: 1.15; }
         .wordmark-primary { font-size: 15px; font-weight: 800; color: var(--navy); }
-        .wordmark-tag { font-size: 8.5px; color: var(--red); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-top: 1px; }
+        .wordmark-tag { font-size: 8.5px; color: var(--brand-accent); font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin-top: 1px; }
 
         .title-block { text-align: right; }
         .doc-title { font-size: 17px; font-weight: 900; color: var(--ink); letter-spacing: .03em; margin: 0; }

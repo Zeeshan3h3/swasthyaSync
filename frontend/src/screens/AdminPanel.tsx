@@ -1,11 +1,13 @@
 import { LiquidButton } from '../components/ui/button';
 import { LogoutDialog } from '../components/LogoutDialog';
-import React, { useState, useEffect } from 'react';
+import { AnalyticsDashboard, RedFlagFeed } from './AnalyticsDashboard';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   ShieldCheck, Lock, Mail, Key, ArrowRight, Plus, LogOut, Calendar, UploadCloud, FileText,
-  Activity, Users, LayoutList, Stethoscope, Settings, List, AlertTriangle, X, Search
+  Activity, Users, LayoutList, Stethoscope, Settings, List, AlertTriangle, X, Search, DownloadCloud, TrendingUp, ShieldAlert
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
 
 const API_BASE = 'http://localhost:8000/api/admin';
 const ADMIN_EMAIL = 'mdzeeshan08886@gmail.com';
@@ -27,7 +29,7 @@ export const AdminPanel: React.FC = () => {
   const [authError, setAuthError] = useState('');
 
   // UI State
-  const [activeTab, setActiveTab] = useState('live_queue');
+  const [activeTab, setActiveTab] = useState('analytics');
   const [showDangerModal, setShowDangerModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showAddDocModal, setShowAddDocModal] = useState(false);
@@ -72,7 +74,11 @@ export const AdminPanel: React.FC = () => {
     navigate('/');
   };
 
+  const isFetchingRef = useRef(false);
+
   const fetchAllData = async () => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
     try {
       const [anRes, quRes, docRes, depRes, patRes, rulRes, logRes] = await Promise.all([
         fetch(`${API_BASE}/analytics`).then(r => r.json()).catch(() => ({})),
@@ -95,19 +101,21 @@ export const AdminPanel: React.FC = () => {
       fetch(`http://localhost:8000/api/admin/notifications`)
         .then(r => r.json())
         .then(d => setNotifications(d.notifications || []))
-        .catch(console.error);
+        .catch(() => {});
     } catch (e) {
       console.error('Data fetch error:', e);
+    } finally {
+      isFetchingRef.current = false;
     }
   };
 
   useEffect(() => {
     if (isAuthenticated) {
       fetchAllData();
-      const interval = setInterval(fetchAllData, 1000);
+      const interval = setInterval(fetchAllData, 3000);
       return () => clearInterval(interval);
     }
-  }, [isAuthenticated, activeTab]);
+  }, [isAuthenticated]);
 
   const handleMarkNotificationRead = async (notif_id: string) => {
     await fetch(`http://localhost:8000/api/admin/notifications/${notif_id}/read`, { method: 'PUT' });
@@ -231,25 +239,33 @@ export const AdminPanel: React.FC = () => {
   if (!isAuthenticated) {
     return (
       <div className="h-screen w-full bg-slate-50 flex items-center justify-center p-4 font-sans">
-        <div className="w-full max-w-md bg-white border border-slate-200 rounded-2xl shadow-2xl overflow-hidden">
-          <div className="bg-purple-100 p-6 border-b border-slate-200 text-center">
-            <Lock className="w-10 h-10 text-purple-600 mx-auto mb-3" />
+        <motion.div 
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+          className="w-full max-w-md bg-white border border-slate-200 rounded-3xl shadow-elevated overflow-hidden"
+        >
+          <div className="bg-purple-50 p-6 border-b border-purple-100 text-center">
+            <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-purple-100 mb-3 shadow-sm">
+              <Lock className="w-8 h-8 text-purple-600" />
+            </div>
             <h2 className="text-2xl font-bold text-slate-900">System Administration</h2>
+            <p className="text-slate-500 text-xs font-medium mt-1">Sign in with administrative privileges</p>
           </div>
           <form onSubmit={handleLogin} className="p-6 space-y-5">
-            {authError && <div className="p-3 bg-red-100 border border-red-200 rounded-lg text-red-600 text-sm text-center">{authError}</div>}
+            {authError && <div className="p-3 bg-red-100 border border-red-200 rounded-xl text-red-600 text-xs font-bold text-center">{authError}</div>}
             <div className="relative">
-              <Mail className="absolute inset-y-3 left-4 h-5 w-5 text-slate-500" />
-              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none shadow-soft-2 rounded-xl text-slate-900 focus:ring-4 focus:ring-purple-200 transition-all" placeholder="Admin Email" />
+              <Mail className="absolute inset-y-3.5 left-4 h-4 w-4 text-slate-400" />
+              <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-sm font-medium" placeholder="Admin Email" />
             </div>
             <div className="relative">
-              <Key className="absolute inset-y-3 left-4 h-5 w-5 text-slate-500" />
-              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-50 border-none shadow-soft-2 rounded-xl text-slate-900 focus:ring-4 focus:ring-purple-200 transition-all" placeholder="Password" />
+              <Key className="absolute inset-y-3.5 left-4 h-4 w-4 text-slate-400" />
+              <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} className="w-full pl-11 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500 transition-all text-sm font-medium" placeholder="Password" />
             </div>
-            <LiquidButton type="submit" className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-slate-900 font-bold rounded-xl flex justify-center items-center">Authenticate <ArrowRight className="ml-2 w-5 h-5" /></LiquidButton>
-            <LiquidButton type="button" onClick={() => navigate('/')} className="w-full py-3 bg-slate-100 hover:bg-slate-700 text-slate-700 font-semibold rounded-xl">Cancel & Return</LiquidButton>
+            <LiquidButton type="submit" className="w-full py-3 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-xl flex justify-center items-center text-sm shadow-md active:scale-[0.97]">Authenticate <ArrowRight className="ml-2 w-4 h-4" /></LiquidButton>
+            <LiquidButton type="button" onClick={() => navigate('/')} className="w-full py-3 bg-white hover:bg-slate-100 text-slate-700 font-bold border border-slate-200 rounded-xl text-sm active:scale-[0.97]">Cancel & Return</LiquidButton>
           </form>
-        </div>
+        </motion.div>
       </div>
     );
   }
@@ -262,6 +278,8 @@ export const AdminPanel: React.FC = () => {
   const normalQueues = filteredQueues.filter(q => !q.priority_flag);
 
   const tabs = [
+    { id: 'analytics', icon: TrendingUp, label: 'Analytics Dashboard', color: 'text-blue-600' },
+    { id: 'red_flags', icon: ShieldAlert, label: 'Live Red Flags', color: 'text-red-500' },
     { id: 'live_queue', icon: Activity, label: 'Live Queue Control', color: 'text-blue-600' },
     { id: 'departments', icon: LayoutList, label: 'Department Manager', color: 'text-emerald-600' },
     { id: 'doctors', icon: Stethoscope, label: 'Doctor Roster', color: 'text-blue-600' },
@@ -270,6 +288,25 @@ export const AdminPanel: React.FC = () => {
     { id: 'logs', icon: List, label: 'Audit Ledger', color: 'text-slate-500' },
     { id: 'reset', icon: AlertTriangle, label: 'End of Day Reset', color: 'text-red-600' },
   ];
+
+  const handleExportDB = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/export-db`);
+      if (!res.ok) throw new Error('Failed to export DB');
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'health_officer_export.json';
+      document.body.appendChild(a);
+      a.click();
+      window.URL.revokeObjectURL(url);
+      a.remove();
+    } catch (err) {
+      alert('Failed to download DB');
+      console.error(err);
+    }
+  };
 
   return (
     <div className="h-screen w-full bg-slate-50 text-slate-900 font-sans p-6 flex flex-col overflow-hidden">
@@ -330,6 +367,9 @@ export const AdminPanel: React.FC = () => {
           <span className="text-sm font-semibold text-purple-600 bg-purple-50 px-3 py-1 rounded-full border border-purple-200/30">
             Admin: {ADMIN_EMAIL}
           </span>
+          <LiquidButton onClick={handleExportDB} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white font-bold transition flex items-center shadow-lg shadow-emerald-600/20 active:scale-95">
+            <DownloadCloud className="w-4 h-4 mr-2" /> Download DB
+          </LiquidButton>
           <LiquidButton onClick={() => setShowLogoutDialog(true)} className="px-4 py-2 bg-white hover:bg-slate-100 rounded-lg border border-slate-200 text-slate-700 transition flex items-center">
             <LogOut className="w-4 h-4 mr-2 text-slate-500" /> Secure Logout
           </LiquidButton>
@@ -338,35 +378,70 @@ export const AdminPanel: React.FC = () => {
 
       {/* Analytics Row */}
       <div className="flex-none grid grid-cols-3 gap-6 mb-6">
-        <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between">
-          <div><p className="text-slate-500 text-sm">Total Footfall</p><h3 className="text-2xl font-bold text-slate-900">{analytics.total_footfall}</h3></div>
-          <Users className="w-8 h-8 text-blue-600" />
+        <div className="bg-white border border-slate-200/80 p-5 rounded-2xl flex items-center justify-between shadow-card hover:shadow-card-hover transition-shadow">
+          <div>
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Total Footfall</p>
+            <h3 className="text-2xl font-black text-slate-900 mt-1">{analytics.total_footfall}</h3>
+          </div>
+          <div className="p-3 bg-blue-50 rounded-xl text-blue-600">
+            <Users className="w-6 h-6" />
+          </div>
         </div>
-        <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between">
-          <div><p className="text-slate-500 text-sm">Avg Wait Time</p><h3 className="text-2xl font-bold text-slate-900">{analytics.avg_wait_time}</h3></div>
-          <Activity className="w-8 h-8 text-emerald-600" />
+        <div className="bg-white border border-slate-200/80 p-5 rounded-2xl flex items-center justify-between shadow-card hover:shadow-card-hover transition-shadow">
+          <div>
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Avg Wait Time</p>
+            <h3 className="text-2xl font-black text-slate-900 mt-1">{analytics.avg_wait_time}</h3>
+          </div>
+          <div className="p-3 bg-emerald-50 rounded-xl text-emerald-600">
+            <Activity className="w-6 h-6" />
+          </div>
         </div>
-        <div className="bg-white border border-slate-200 p-4 rounded-xl flex items-center justify-between">
-          <div><p className="text-slate-500 text-sm">Active Emergencies</p><h3 className="text-2xl font-bold text-slate-900">{analytics.emergency_active}</h3></div>
-          <AlertTriangle className={`w-8 h-8 ${analytics.emergency_active > 0 ? 'text-red-600 animate-pulse' : 'text-slate-600'}`} />
+        <div className="bg-white border border-slate-200/80 p-5 rounded-2xl flex items-center justify-between shadow-card hover:shadow-card-hover transition-shadow">
+          <div>
+            <p className="text-slate-400 text-xs font-bold uppercase tracking-wider">Active Emergencies</p>
+            <h3 className="text-2xl font-black text-slate-900 mt-1">{analytics.emergency_active}</h3>
+          </div>
+          <div className={`p-3 rounded-xl ${analytics.emergency_active > 0 ? 'bg-red-50 text-red-600' : 'bg-slate-100 text-slate-400'}`}>
+            <AlertTriangle className={`w-6 h-6 ${analytics.emergency_active > 0 ? 'animate-pulse' : ''}`} />
+          </div>
         </div>
       </div>
 
       <div className="flex-1 flex gap-6 overflow-hidden">
         {/* Sidebar Tabs */}
-        <div className="w-64 bg-slate-50 shadow-soft-1 border-none rounded-2xl p-6 flex flex-col h-[calc(100vh-140px)] overflow-y-auto">
+        <div className="w-64 bg-white shadow-card border border-slate-200/80 rounded-3xl p-3 flex flex-col h-[calc(100vh-140px)] overflow-y-auto gap-1">
           {tabs.map(tab => (
-            <LiquidButton key={tab.id} onClick={() => setActiveTab(tab.id)} className={`w-full flex items-center px-4 py-3 rounded-lg text-left transition ${activeTab === tab.id ? 'bg-slate-100 border-l-4 border-blue-600' : 'hover:bg-white border-l-4 border-transparent'}`}>
-              <tab.icon className={`w-5 h-5 mr-3 ${tab.color}`} />
-              <span className={`text-sm font-medium ${activeTab === tab.id ? 'text-slate-900' : 'text-slate-500'}`}>{tab.label}</span>
-            </LiquidButton>
+            <button 
+              key={tab.id} 
+              onClick={() => setActiveTab(tab.id)} 
+              className={`w-full flex items-center px-3.5 py-2.5 rounded-2xl text-left transition-all duration-150 cursor-pointer active:scale-[0.97] ${
+                activeTab === tab.id 
+                  ? 'bg-blue-50/80 text-blue-700 font-bold border border-blue-200/60 shadow-sm' 
+                  : 'hover:bg-slate-50 text-slate-600 font-medium border border-transparent'
+              }`}
+            >
+              <tab.icon className={`w-4 h-4 mr-2.5 shrink-0 ${activeTab === tab.id ? 'text-blue-600' : tab.color}`} />
+              <span className="text-xs truncate">{tab.label}</span>
+            </button>
           ))}
         </div>
 
         {/* Main Content Area */}
-        <div className="flex-1 bg-white border border-slate-200 rounded-xl overflow-hidden flex flex-col">
+        <div className="flex-1 bg-white border border-slate-200/80 rounded-3xl overflow-hidden flex flex-col shadow-card">
           <div className="flex-1 overflow-y-auto p-6">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={activeTab}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -6 }}
+                transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+              >
             
+            {activeTab === 'analytics' && <AnalyticsDashboard />}
+
+            {activeTab === 'red_flags' && <RedFlagFeed />}
+
             {activeTab === 'live_queue' && (
               <div className="space-y-6">
                 <div className="flex items-center justify-between">
@@ -733,236 +808,271 @@ export const AdminPanel: React.FC = () => {
                 </div>
                 <h2 className="text-3xl font-bold text-slate-900 mb-4">Danger Zone</h2>
                 <p className="text-slate-500 max-w-lg mb-8">This action will archive all IN_PROGRESS queues. It should only be used at the end of the day or in case of a system-wide reset. Active patient records will be preserved.</p>
-                <LiquidButton onClick={() => setShowDangerModal(true)} className="bg-[#ff4d4f] hover:bg-red-500 text-slate-900 font-bold py-4 px-8 rounded-xl shadow-[0_0_20px_rgba(255,77,79,0.4)] transition transform hover:scale-105">Initialize EOD Reset</LiquidButton>
+                <LiquidButton onClick={() => setShowDangerModal(true)} className="bg-[#ff4d4f] hover:bg-red-500 text-white font-bold py-4 px-8 rounded-xl shadow-[0_0_20px_rgba(255,77,79,0.4)] transition transform hover:scale-105 active:scale-[0.97]">Initialize EOD Reset</LiquidButton>
               </div>
             )}
 
+              </motion.div>
+            </AnimatePresence>
           </div>
         </div>
       </div>
 
       {/* Danger Modal */}
-      {showDangerModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-white border border-red-200/50 p-8 rounded-2xl max-w-md w-full animate-in fade-in zoom-in duration-200">
-            <h3 className="text-2xl font-bold text-slate-900 mb-4">Confirm Reset</h3>
-            <p className="text-slate-700 mb-6">Are you absolutely sure? This will archive {normalQueues.length + priorityQueues.length} active queues.</p>
-            <div className="flex space-x-4">
-              <LiquidButton onClick={() => setShowDangerModal(false)} className="flex-1 py-3 bg-slate-100 hover:bg-slate-700 text-slate-900 font-semibold rounded-xl">Cancel</LiquidButton>
-              <LiquidButton onClick={handleResetClinic} className="flex-1 py-3 bg-[#ff4d4f] hover:bg-red-500 text-slate-900 font-bold rounded-xl">Yes, Reset Now</LiquidButton>
-            </div>
+      <AnimatePresence>
+        {showDangerModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="bg-white border border-red-200/50 p-8 rounded-3xl max-w-md w-full shadow-elevated"
+            >
+              <h3 className="text-2xl font-bold text-slate-900 mb-4">Confirm Reset</h3>
+              <p className="text-slate-700 mb-6">Are you absolutely sure? This will archive {normalQueues.length + priorityQueues.length} active queues.</p>
+              <div className="flex space-x-4">
+                <LiquidButton onClick={() => setShowDangerModal(false)} className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-900 font-semibold rounded-xl">Cancel</LiquidButton>
+                <LiquidButton onClick={handleResetClinic} className="flex-1 py-3 bg-[#ff4d4f] hover:bg-red-500 text-white font-bold rounded-xl">Yes, Reset Now</LiquidButton>
+              </div>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
 
       {/* Edit Patient Modal */}
-      {showEditModal && editingPatient && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-white border border-slate-300 rounded-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-900">Edit Patient Record</h3>
-              <LiquidButton onClick={() => setShowEditModal(false)} className="text-slate-500 hover:text-slate-900"><X className="w-5 h-5" /></LiquidButton>
-            </div>
-            <form onSubmit={handlePatientUpdate} className="p-6 space-y-4">
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">Full Name</label>
-                <input type="text" required value={editingPatient.full_name} onChange={e=>setEditingPatient({...editingPatient, full_name: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" />
+      <AnimatePresence>
+        {showEditModal && editingPatient && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="bg-white border border-slate-200 rounded-3xl max-w-md w-full overflow-hidden shadow-elevated"
+            >
+              <div className="bg-slate-50 p-4 border-b border-slate-200 flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-900">Edit Patient Record</h3>
+                <LiquidButton onClick={() => setShowEditModal(false)} className="text-slate-500 hover:text-slate-900"><X className="w-5 h-5" /></LiquidButton>
               </div>
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">Phone Number (Family)</label>
-                <input type="text" required value={editingPatient.phone_number} onChange={e=>setEditingPatient({...editingPatient, phone_number: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" />
-              </div>
-              <div className="bg-slate-50 p-3 rounded border border-slate-200 mt-4">
-                <p className="text-xs text-slate-500 mb-1">Patient ID (Read-Only)</p>
-                <p className="text-sm font-mono text-slate-700 truncate">{editingPatient.patient_id}</p>
-              </div>
-              <LiquidButton type="submit" className="w-full py-3 mt-4 bg-[#00d084] hover:bg-[#00b070] text-black font-bold rounded-xl">Save Changes</LiquidButton>
-            </form>
+              <form onSubmit={handlePatientUpdate} className="p-6 space-y-4">
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Full Name</label>
+                  <input type="text" required value={editingPatient.full_name} onChange={e=>setEditingPatient({...editingPatient, full_name: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" />
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Phone Number (Family)</label>
+                  <input type="text" required value={editingPatient.phone_number} onChange={e=>setEditingPatient({...editingPatient, phone_number: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" />
+                </div>
+                <div className="bg-slate-50 p-3 rounded border border-slate-200 mt-4">
+                  <p className="text-xs text-slate-500 mb-1">Patient ID (Read-Only)</p>
+                  <p className="text-sm font-mono text-slate-700 truncate">{editingPatient.patient_id}</p>
+                </div>
+                <LiquidButton type="submit" className="w-full py-3 mt-4 bg-[#00d084] hover:bg-[#00b070] text-black font-bold rounded-xl">Save Changes</LiquidButton>
+              </form>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
       {/* Add Doctor Modal */}
-      {showAddDocModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-white border border-blue-200/30 rounded-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="bg-white p-4 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-900 flex items-center"><Stethoscope className="w-5 h-5 mr-2 text-blue-600" /> Register Provider</h3>
-              <LiquidButton onClick={() => setShowAddDocModal(false)} className="text-slate-500 hover:text-slate-900"><X className="w-5 h-5" /></LiquidButton>
-            </div>
-            <form onSubmit={handleAddDoctor} className="p-6 space-y-4">
-              <div><label className="text-xs text-slate-500 mb-1 block">Full Name</label><input type="text" required value={newDoc.full_name} onChange={e=>setNewDoc({...newDoc, full_name: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs text-slate-500 mb-1 block">License No</label><input type="text" required value={newDoc.license_number} onChange={e=>setNewDoc({...newDoc, license_number: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-                <div><label className="text-xs text-slate-500 mb-1 block">Room Number</label><input type="text" value={newDoc.room_number} onChange={e=>setNewDoc({...newDoc, room_number: e.target.value})} placeholder="e.g. 101" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+      <AnimatePresence>
+        {showAddDocModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="bg-white border border-slate-200 rounded-3xl max-w-md w-full overflow-hidden shadow-elevated"
+            >
+              <div className="bg-white p-4 border-b border-slate-200 flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center"><Stethoscope className="w-5 h-5 mr-2 text-blue-600" /> Register Provider</h3>
+                <LiquidButton onClick={() => setShowAddDocModal(false)} className="text-slate-500 hover:text-slate-900"><X className="w-5 h-5" /></LiquidButton>
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs text-slate-500 mb-1 block">Username</label><input type="text" required value={newDoc.username} onChange={e=>setNewDoc({...newDoc, username: e.target.value})} placeholder="Doctor Username" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-                <div><label className="text-xs text-slate-500 mb-1 block">Password</label><input type="password" required value={newDoc.password} onChange={e=>setNewDoc({...newDoc, password: e.target.value})} placeholder="Secure Password" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs text-slate-500 mb-1 block">Department</label>
-                  <select required value={newDoc.dept_id} onChange={e=>setNewDoc({...newDoc, dept_id: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900">
-                    <option value="">Select Dept</option>
-                    {departments.map(d => <option key={d.dept_id} value={d.dept_id}>{d.name}</option>)}
-                  </select>
+              <form onSubmit={handleAddDoctor} className="p-6 space-y-4">
+                <div><label className="text-xs text-slate-500 mb-1 block">Full Name</label><input type="text" required value={newDoc.full_name} onChange={e=>setNewDoc({...newDoc, full_name: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-xs text-slate-500 mb-1 block">License No</label><input type="text" required value={newDoc.license_number} onChange={e=>setNewDoc({...newDoc, license_number: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+                  <div><label className="text-xs text-slate-500 mb-1 block">Room Number</label><input type="text" value={newDoc.room_number} onChange={e=>setNewDoc({...newDoc, room_number: e.target.value})} placeholder="e.g. 101" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
                 </div>
-                <div><label className="text-xs text-slate-500 mb-1 block">Max Daily Patients</label><input type="number" required value={newDoc.max_daily_patients} onChange={e=>setNewDoc({...newDoc, max_daily_patients: parseInt(e.target.value)})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-              </div>
-              <div className="pt-2">
-                <label className="text-xs text-slate-500 mb-2 block">Profile Image (Drag & Drop or Select File)</label>
-                <div 
-                  className="border-2 border-dashed border-slate-300 hover:border-blue-200/50 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 transition-colors relative group"
-                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-blue-200', 'bg-[#00e5ff]/5'); }}
-                  onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-blue-200', 'bg-[#00e5ff]/5'); }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.remove('border-blue-200', 'bg-[#00e5ff]/5');
-                    const file = e.dataTransfer.files[0];
-                    if (file && file.type.startsWith('image/')) {
-                      const reader = new FileReader();
-                      reader.onload = (event) => {
-                        if (event.target?.result) {
-                          setNewDoc({ ...newDoc, profile_image_url: event.target.result.toString() });
-                        }
-                      };
-                      reader.readAsDataURL(file);
-                    }
-                  }}
-                >
-                  {newDoc.profile_image_url ? (
-                    <div className="relative w-full flex justify-center">
-                      <img src={newDoc.profile_image_url} alt="Preview" className="h-20 w-20 rounded-full object-cover border-2 border-blue-200/30" />
-                      <LiquidButton 
-                        type="button"
-                        onClick={(e: React.MouseEvent) => { e.preventDefault(); setNewDoc({ ...newDoc, profile_image_url: '' }); }}
-                        className="absolute -top-2 -right-2 md:right-1/4 bg-[#ff4d4f] text-slate-900 rounded-full p-1 hover:bg-red-500 shadow-lg"
-                      >
-                        <X className="w-3 h-3" />
-                      </LiquidButton>
-                    </div>
-                  ) : (
-                    <>
-                      <UploadCloud className="w-8 h-8 text-slate-500 mb-2 group-hover:text-blue-600 transition-colors" />
-                      <p className="text-xs text-slate-500 mb-3">Drag image here or select from device</p>
-                      <label className="cursor-pointer bg-white hover:bg-slate-100 border border-slate-300 hover:border-blue-200/50 text-slate-700 transition-colors px-4 py-2 rounded-lg text-xs font-medium">
-                        Select Image
-                        <input 
-                          type="file" 
-                          accept="image/*"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) {
-                              const reader = new FileReader();
-                              reader.onload = (event) => {
-                                if (event.target?.result) {
-                                  setNewDoc({ ...newDoc, profile_image_url: event.target.result.toString() });
-                                }
-                              };
-                              reader.readAsDataURL(file);
-                            }
-                          }}
-                        />
-                      </label>
-                    </>
-                  )}
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-xs text-slate-500 mb-1 block">Username</label><input type="text" required value={newDoc.username} onChange={e=>setNewDoc({...newDoc, username: e.target.value})} placeholder="Doctor Username" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+                  <div><label className="text-xs text-slate-500 mb-1 block">Password</label><input type="password" required value={newDoc.password} onChange={e=>setNewDoc({...newDoc, password: e.target.value})} placeholder="Secure Password" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
                 </div>
-              </div>
-
-              <LiquidButton type="submit" className="w-full mt-4 bg-[#00e5ff] hover:bg-[#00c5dd] text-black font-bold py-3 rounded-xl">Register Doctor</LiquidButton>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Edit Doctor Modal */}
-      {showEditDocModal && editingDoctor && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-          <div className="bg-white border border-blue-200/30 rounded-2xl max-w-md w-full overflow-hidden animate-in fade-in zoom-in duration-200">
-            <div className="bg-white p-4 border-b border-slate-200 flex justify-between items-center">
-              <h3 className="text-lg font-bold text-slate-900 flex items-center"><Stethoscope className="w-5 h-5 mr-2 text-blue-600" /> Edit Provider</h3>
-              <LiquidButton onClick={() => setShowEditDocModal(false)} className="text-slate-500 hover:text-slate-900"><X className="w-5 h-5" /></LiquidButton>
-            </div>
-            <form onSubmit={handleUpdateDoctor} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
-              <div><label className="text-xs text-slate-500 mb-1 block">Full Name</label><input type="text" required value={editingDoctor.full_name} onChange={e=>setEditingDoctor({...editingDoctor, full_name: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs text-slate-500 mb-1 block">License No</label><input type="text" required value={editingDoctor.license_number} onChange={e=>setEditingDoctor({...editingDoctor, license_number: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-                <div><label className="text-xs text-slate-500 mb-1 block">Room Number</label><input type="text" value={editingDoctor.room_number || ''} onChange={e=>setEditingDoctor({...editingDoctor, room_number: e.target.value})} placeholder="e.g. 101" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs text-slate-500 mb-1 block">Username</label><input type="text" required value={editingDoctor.username || ''} onChange={e=>setEditingDoctor({...editingDoctor, username: e.target.value})} placeholder="Doctor Username" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-                <div><label className="text-xs text-slate-500 mb-1 block">Password</label><input type="password" required value={editingDoctor.password || ''} onChange={e=>setEditingDoctor({...editingDoctor, password: e.target.value})} placeholder="Secure Password" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="text-xs text-slate-500 mb-1 block">Department</label>
-                  <select required value={editingDoctor.dept_id} onChange={e=>setEditingDoctor({...editingDoctor, dept_id: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900">
-                    <option value="">Select Dept</option>
-                    {departments.map(d => <option key={d.dept_id} value={d.dept_id}>{d.name}</option>)}
-                  </select>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-xs text-slate-500 mb-1 block">Department</label>
+                    <select required value={newDoc.dept_id} onChange={e=>setNewDoc({...newDoc, dept_id: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900">
+                      <option value="">Select Dept</option>
+                      {departments.map(d => <option key={d.dept_id} value={d.dept_id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div><label className="text-xs text-slate-500 mb-1 block">Max Daily Patients</label><input type="number" required value={newDoc.max_daily_patients} onChange={e=>setNewDoc({...newDoc, max_daily_patients: parseInt(e.target.value)})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
                 </div>
-                <div><label className="text-xs text-slate-500 mb-1 block">Max Daily Patients</label><input type="number" required value={editingDoctor.max_daily_patients} onChange={e=>setEditingDoctor({...editingDoctor, max_daily_patients: parseInt(e.target.value)})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
-              </div>
-              <div>
-                <label className="text-xs text-slate-500 mb-1 block">Status</label>
-                <select required value={editingDoctor.status || 'Active'} onChange={e=>setEditingDoctor({...editingDoctor, status: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900">
-                  <option value="Active">Active</option>
-                  <option value="Inactive">Inactive</option>
-                  <option value="On Leave">On Leave</option>
-                </select>
-              </div>
-              
-              <div className="pt-2">
-                <label className="text-xs text-slate-500 mb-2 block">Update Profile Image (Optional)</label>
-                <div 
-                  className="border-2 border-dashed border-slate-300 hover:border-blue-200/50 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 transition-colors relative group"
-                  onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-blue-200', 'bg-[#00e5ff]/5'); }}
-                  onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-blue-200', 'bg-[#00e5ff]/5'); }}
-                  onDrop={(e) => {
-                    e.preventDefault();
-                    e.currentTarget.classList.remove('border-blue-200', 'bg-[#00e5ff]/5');
-                    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                <div className="pt-2">
+                  <label className="text-xs text-slate-500 mb-2 block">Profile Image (Drag & Drop or Select File)</label>
+                  <div 
+                    className="border-2 border-dashed border-slate-300 hover:border-blue-200/50 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 transition-colors relative group"
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-blue-200', 'bg-[#00e5ff]/5'); }}
+                    onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-blue-200', 'bg-[#00e5ff]/5'); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-blue-200', 'bg-[#00e5ff]/5');
                       const file = e.dataTransfer.files[0];
-                      if (file.type.startsWith('image/')) {
+                      if (file && file.type.startsWith('image/')) {
                         const reader = new FileReader();
-                        reader.onload = (ev) => setEditingDoctor({...editingDoctor, profile_image_url: ev.target?.result as string});
+                        reader.onload = (event) => {
+                          if (event.target?.result) {
+                            setNewDoc({ ...newDoc, profile_image_url: event.target.result.toString() });
+                          }
+                        };
                         reader.readAsDataURL(file);
                       }
-                    }
-                  }}
-                >
-                  {editingDoctor.profile_image_url ? (
-                    <div className="relative w-full flex justify-center">
-                      <img src={editingDoctor.profile_image_url} alt="Preview" className="h-20 w-20 rounded-full object-cover border-2 border-blue-200/30" />
-                      <LiquidButton 
-                        type="button" 
-                        onClick={() => setEditingDoctor({...editingDoctor, profile_image_url: ''})} 
-                        className="absolute -top-2 -right-2 md:right-1/4 bg-[#ff4d4f] text-slate-900 rounded-full p-1 hover:bg-red-500 shadow-lg"
-                      >
-                        <X className="w-3 h-3" />
-                      </LiquidButton>
-                    </div>
-                  ) : (
-                    <>
-                      <UploadCloud className="w-8 h-8 text-slate-500 mb-2 group-hover:text-blue-600 transition-colors" />
-                      <label className="cursor-pointer bg-white hover:bg-slate-100 border border-slate-300 hover:border-blue-200/50 text-slate-700 transition-colors px-4 py-2 rounded-lg text-xs font-medium">
-                        Select New Image
-                        <input type="file" accept="image/*" className="hidden" onChange={(e) => {
-                          if (e.target.files && e.target.files[0]) {
-                            const reader = new FileReader();
-                            reader.onload = (ev) => setEditingDoctor({...editingDoctor, profile_image_url: ev.target?.result as string});
-                            reader.readAsDataURL(e.target.files[0]);
-                          }
-                        }} />
-                      </label>
-                    </>
-                  )}
+                    }}
+                  >
+                    {newDoc.profile_image_url ? (
+                      <div className="relative w-full flex justify-center">
+                        <img src={newDoc.profile_image_url} alt="Preview" className="h-20 w-20 rounded-full object-cover border-2 border-blue-200/30" />
+                        <LiquidButton 
+                          type="button"
+                          onClick={(e: React.MouseEvent) => { e.preventDefault(); setNewDoc({ ...newDoc, profile_image_url: '' }); }}
+                          className="absolute -top-2 -right-2 md:right-1/4 bg-[#ff4d4f] text-slate-900 rounded-full p-1 hover:bg-red-500 shadow-lg"
+                        >
+                          <X className="w-3 h-3" />
+                        </LiquidButton>
+                      </div>
+                    ) : (
+                      <>
+                        <UploadCloud className="w-8 h-8 text-slate-500 mb-2 group-hover:text-blue-600 transition-colors" />
+                        <p className="text-xs text-slate-500 mb-3">Drag image here or select from device</p>
+                        <label className="cursor-pointer bg-white hover:bg-slate-100 border border-slate-300 hover:border-blue-200/50 text-slate-700 transition-colors px-4 py-2 rounded-lg text-xs font-medium">
+                          Select Image
+                          <input 
+                            type="file" 
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const reader = new FileReader();
+                                reader.onload = (event) => {
+                                  if (event.target?.result) {
+                                    setNewDoc({ ...newDoc, profile_image_url: event.target.result.toString() });
+                                  }
+                                };
+                                reader.readAsDataURL(file);
+                              }
+                            }}
+                          />
+                        </label>
+                      </>
+                    )}
+                  </div>
                 </div>
-              </div>
-              <LiquidButton type="submit" className="w-full mt-4 bg-[#00e5ff] hover:bg-[#00c5dd] text-black font-bold py-3 rounded-xl">Save Changes</LiquidButton>
-            </form>
+
+                <LiquidButton type="submit" className="w-full mt-4 bg-[#00e5ff] hover:bg-[#00c5dd] text-black font-bold py-3 rounded-xl">Register Doctor</LiquidButton>
+              </form>
+            </motion.div>
           </div>
-        </div>
-      )}
+        )}
+      </AnimatePresence>
+
+      {/* Edit Doctor Modal */}
+      <AnimatePresence>
+        {showEditDocModal && editingDoctor && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/40 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.96, y: 8 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.96, y: 8 }}
+              transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
+              className="bg-white border border-slate-200 rounded-3xl max-w-md w-full overflow-hidden shadow-elevated"
+            >
+              <div className="bg-white p-4 border-b border-slate-200 flex justify-between items-center">
+                <h3 className="text-lg font-bold text-slate-900 flex items-center"><Stethoscope className="w-5 h-5 mr-2 text-blue-600" /> Edit Provider</h3>
+                <LiquidButton onClick={() => setShowEditDocModal(false)} className="text-slate-500 hover:text-slate-900"><X className="w-5 h-5" /></LiquidButton>
+              </div>
+              <form onSubmit={handleUpdateDoctor} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scrollbar">
+                <div><label className="text-xs text-slate-500 mb-1 block">Full Name</label><input type="text" required value={editingDoctor.full_name} onChange={e=>setEditingDoctor({...editingDoctor, full_name: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-xs text-slate-500 mb-1 block">License No</label><input type="text" required value={editingDoctor.license_number} onChange={e=>setEditingDoctor({...editingDoctor, license_number: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+                  <div><label className="text-xs text-slate-500 mb-1 block">Room Number</label><input type="text" value={editingDoctor.room_number || ''} onChange={e=>setEditingDoctor({...editingDoctor, room_number: e.target.value})} placeholder="e.g. 101" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-xs text-slate-500 mb-1 block">Username</label><input type="text" required value={editingDoctor.username || ''} onChange={e=>setEditingDoctor({...editingDoctor, username: e.target.value})} placeholder="Doctor Username" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+                  <div><label className="text-xs text-slate-500 mb-1 block">Password</label><input type="password" required value={editingDoctor.password || ''} onChange={e=>setEditingDoctor({...editingDoctor, password: e.target.value})} placeholder="Secure Password" className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div><label className="text-xs text-slate-500 mb-1 block">Department</label>
+                    <select required value={editingDoctor.dept_id} onChange={e=>setEditingDoctor({...editingDoctor, dept_id: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900">
+                      <option value="">Select Dept</option>
+                      {departments.map(d => <option key={d.dept_id} value={d.dept_id}>{d.name}</option>)}
+                    </select>
+                  </div>
+                  <div><label className="text-xs text-slate-500 mb-1 block">Max Daily Patients</label><input type="number" required value={editingDoctor.max_daily_patients} onChange={e=>setEditingDoctor({...editingDoctor, max_daily_patients: parseInt(e.target.value)})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900" /></div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 mb-1 block">Status</label>
+                  <select required value={editingDoctor.status || 'Active'} onChange={e=>setEditingDoctor({...editingDoctor, status: e.target.value})} className="w-full bg-slate-50 border border-slate-300 rounded px-3 py-2 text-slate-900">
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="On Leave">On Leave</option>
+                  </select>
+                </div>
+                
+                <div className="pt-2">
+                  <label className="text-xs text-slate-500 mb-2 block">Update Profile Image (Optional)</label>
+                  <div 
+                    className="border-2 border-dashed border-slate-300 hover:border-blue-200/50 rounded-xl p-4 flex flex-col items-center justify-center text-center bg-slate-50 transition-colors relative group"
+                    onDragOver={(e) => { e.preventDefault(); e.currentTarget.classList.add('border-blue-200', 'bg-[#00e5ff]/5'); }}
+                    onDragLeave={(e) => { e.preventDefault(); e.currentTarget.classList.remove('border-blue-200', 'bg-[#00e5ff]/5'); }}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove('border-blue-200', 'bg-[#00e5ff]/5');
+                      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                        const file = e.dataTransfer.files[0];
+                        if (file.type.startsWith('image/')) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => setEditingDoctor({...editingDoctor, profile_image_url: ev.target?.result as string});
+                          reader.readAsDataURL(file);
+                        }
+                      }
+                    }}
+                  >
+                    {editingDoctor.profile_image_url ? (
+                      <div className="relative w-full flex justify-center">
+                        <img src={editingDoctor.profile_image_url} alt="Preview" className="h-20 w-20 rounded-full object-cover border-2 border-blue-200/30" />
+                        <LiquidButton 
+                          type="button" 
+                          onClick={() => setEditingDoctor({...editingDoctor, profile_image_url: ''})} 
+                          className="absolute -top-2 -right-2 md:right-1/4 bg-[#ff4d4f] text-slate-900 rounded-full p-1 hover:bg-red-500 shadow-lg"
+                        >
+                          <X className="w-3 h-3" />
+                        </LiquidButton>
+                      </div>
+                    ) : (
+                      <>
+                        <UploadCloud className="w-8 h-8 text-slate-500 mb-2 group-hover:text-blue-600 transition-colors" />
+                        <label className="cursor-pointer bg-white hover:bg-slate-100 border border-slate-300 hover:border-blue-200/50 text-slate-700 transition-colors px-4 py-2 rounded-lg text-xs font-medium">
+                          Select New Image
+                          <input type="file" accept="image/*" className="hidden" onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => setEditingDoctor({...editingDoctor, profile_image_url: ev.target?.result as string});
+                              reader.readAsDataURL(e.target.files[0]);
+                            }
+                          }} />
+                        </label>
+                      </>
+                    )}
+                  </div>
+                </div>
+                <LiquidButton type="submit" className="w-full mt-4 bg-[#00e5ff] hover:bg-[#00c5dd] text-black font-bold py-3 rounded-xl">Save Changes</LiquidButton>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       <LogoutDialog 
         isOpen={showLogoutDialog} 

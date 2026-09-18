@@ -1,4 +1,4 @@
-import { useCallback, useRef } from 'react';
+import { useCallback, useRef, useEffect } from 'react';
 import { audioTranslations } from '../utils/audioTranslations';
 import type { TranslationKey, SupportedLanguage } from '../utils/audioTranslations';
 import { useAudioGuideContext } from '../context/AudioGuideContext';
@@ -14,20 +14,44 @@ const MAX_PLAYS_PER_KEY = 5;
 
 export function useAudioGuide() {
   const { language, setLanguage, uiLang, setUiLang, isMuted, setIsMuted } = useAudioGuideContext();
-  const { speak: sarvamSpeak, stop: sarvamStop } = useSarvamTTS();
+  const { speak: sarvamSpeak, stop: sarvamStop, isSpeaking } = useSarvamTTS();
   const lastSpokenKeyRef = useRef<string | null>(null);
   const playCountRef = useRef<Record<string, number>>({});
 
+  // ── Immediately stop all audio when muted ──
+  useEffect(() => {
+    if (isMuted) {
+      sarvamStop();
+      // Also kill browser-native speechSynthesis (fallback TTS)
+      if ('speechSynthesis' in window) {
+        window.speechSynthesis.cancel();
+      }
+    }
+  }, [isMuted, sarvamStop]);
+
+  // ── Stop active audio when UI language changes ──
+  useEffect(() => {
+    sarvamStop();
+    if ('speechSynthesis' in window) {
+      window.speechSynthesis.cancel();
+    }
+  }, [uiLang, sarvamStop]);
+
   const speak = useCallback(
-    (key: TranslationKey, dynamicReplacements?: Record<string, string>) => {
+    (
+      key: TranslationKey,
+      dynamicReplacements?: Record<string, string>,
+      loopCount: number = 4,
+      force: boolean = false
+    ) => {
       if (isMuted) return;
 
-      // Enforce max play limit per key (avoids headache from looping)
+      // Enforce max play limit per key unless forced
       const count = playCountRef.current[key] || 0;
-      if (count >= MAX_PLAYS_PER_KEY) return;
+      if (!force && count >= MAX_PLAYS_PER_KEY) return;
 
-      // Prevent exact same prompt from firing in rapid succession
-      if (lastSpokenKeyRef.current === key) {
+      // Prevent exact same prompt from firing in rapid succession unless forced
+      if (!force && lastSpokenKeyRef.current === key) {
         return;
       }
       lastSpokenKeyRef.current = key;
@@ -35,7 +59,7 @@ export function useAudioGuide() {
         if (lastSpokenKeyRef.current === key) {
           lastSpokenKeyRef.current = null;
         }
-      }, 3000);
+      }, 1500);
 
       // Increment play count for this key
       playCountRef.current[key] = count + 1;
@@ -55,7 +79,7 @@ export function useAudioGuide() {
         });
       }
 
-      sarvamSpeak(textToSpeak, ttsLang, 4).catch(console.error);
+      sarvamSpeak(textToSpeak, ttsLang, loopCount).catch(console.error);
     },
     [isMuted, uiLang, language, sarvamSpeak]
   );
@@ -70,5 +94,5 @@ export function useAudioGuide() {
     playCountRef.current = {};
   }, []);
 
-  return { speak, stop, resetPlayCount, language, setLanguage, uiLang, setUiLang, isMuted, setIsMuted };
+  return { speak, stop, isSpeaking, resetPlayCount, language, setLanguage, uiLang, setUiLang, isMuted, setIsMuted };
 }

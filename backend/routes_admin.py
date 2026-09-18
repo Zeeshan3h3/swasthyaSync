@@ -1,4 +1,5 @@
 from fastapi import APIRouter, HTTPException, Body
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import List, Optional, Dict, Any
 import database
@@ -61,7 +62,10 @@ async def downgrade_queue(session_id: str, req: AdminActionReq):
 
 @admin_router.get("/doctors")
 async def get_doctors():
-    return await database.get_doctors()
+    try:
+        return await database.get_doctors()
+    except Exception as e:
+        return []
 
 @admin_router.post("/doctors")
 async def add_doctor(req: DoctorReq):
@@ -149,3 +153,29 @@ async def reset_clinic(req: AdminActionReq):
 @admin_router.get("/logs")
 async def get_logs():
     return await database.get_system_logs()
+
+@admin_router.get("/export-db")
+async def export_db():
+    data = await database.get_health_officer_export_data()
+    return JSONResponse(
+        content=data,
+        headers={"Content-Disposition": 'attachment; filename="health_officer_export.json"'}
+    )
+
+@admin_router.get("/dashboard-data")
+async def get_dashboard_data(
+    start: str = None, end: str = None,
+    departments: str = None, complaints: str = None
+):
+    dept_list = departments.split(",") if departments else None
+    comp_list = complaints.split(",") if complaints else None
+    return await database.get_dashboard_data(start, end, dept_list, comp_list)
+
+@admin_router.get("/red-flags-live")
+async def get_red_flags_live():
+    return await database.get_active_red_flags()
+
+@admin_router.get("/impact-metrics")
+async def get_impact_metrics():
+    return await database.get_impact_metrics()
+

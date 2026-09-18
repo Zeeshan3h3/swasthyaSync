@@ -168,6 +168,45 @@ def _generate_json_with_retry(
     circuit_breaker.record_failure(str(last_exception)[:80])
     raise last_exception or RuntimeError("All Gemini model attempts failed")
 
+def generate_portal_chat_reply(system_prompt: str, user_prompt: str, temperature: float = 0.5) -> str:
+    """Standard text generation for the Patient Portal Chatbot with retry logic."""
+    client = _get_client()
+    if not client:
+        return "I'm sorry, my AI systems are currently offline. Please try again later."
+        
+    if not circuit_breaker.allow_request():
+        return "The system is currently experiencing high load. Please try again in a few moments."
+
+    models_to_try = [PRIMARY_MODEL, FALLBACK_MODEL]
+    last_exception = None
+
+    for model in models_to_try:
+        for attempt in range(2):
+            try:
+                config = genai_types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    response_mime_type="text/plain",
+                    temperature=temperature,
+                    max_output_tokens=512,
+                )
+                response = client.models.generate_content(
+                    model=model,
+                    contents=user_prompt,
+                    config=config,
+                )
+                circuit_breaker.record_success()
+                return response.text
+            except Exception as e:
+                last_exception = e
+                err_msg = str(e)
+                if "503" in err_msg or "UNAVAILABLE" in err_msg:
+                    break
+                if attempt < 1:
+                    time.sleep(0.5)
+                    
+    circuit_breaker.record_failure(str(last_exception)[:80])
+    return "I apologize, but I encountered an error while processing your request. Please ask your doctor for specific medical advice."
+
 
 # ──────────────────────────────────────────────────────────────────────
 # Unified Call: conversation_turn

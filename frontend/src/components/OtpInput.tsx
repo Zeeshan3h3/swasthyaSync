@@ -85,12 +85,12 @@ export function OtpInput({ value, onChange, hasError = false, disabled = false, 
           }}
           className={`
             w-11 h-14 sm:w-14 sm:h-16 text-center text-xl sm:text-2xl font-bold rounded-2xl
-            border-2 outline-none transition-all duration-150 select-none
+            border-2 outline-none transition-[transform,border-color,background-color,box-shadow] duration-150 select-none
             ${hasError
               ? 'border-red-400 bg-red-50 text-red-600'
               : digit
                 ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md shadow-blue-500/10'
-                : 'border-slate-200 bg-slate-50 text-slate-900 focus:border-blue-400 focus:ring-4 focus:ring-blue-500/10'
+                : 'border-slate-200 bg-slate-50 text-slate-900 focus:scale-105 focus:border-blue-500 focus:ring-4 focus:ring-blue-500/15 focus:bg-white focus:shadow-sm'
             }
             ${disabled ? 'opacity-50 cursor-not-allowed' : 'cursor-text'}
           `}

@@ -1,11 +1,13 @@
 import { LiquidButton } from '../components/ui/button';
 import { CheckCircle2, Activity, FileText, Send, UserCircle, Pill, TestTube, AlertTriangle } from 'lucide-react';
+import { toast } from '../components/Toast';
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTranslation } from '../hooks/useTranslation';
 import { getApiBaseUrl } from '../config';
 import { useNavigate } from 'react-router-dom';
 import { useAudioGuide } from '../hooks/useAudioGuide';
+import { AnimatedNumber } from '../components/AnimatedNumber';
 
 interface Props {
   language: string;
@@ -83,7 +85,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
       setIsSent(true);
     } catch (err) {
       console.error('Failed to submit to doctor:', err);
-      alert('Failed to send to doctor. Please try again.');
+      toast.error('Failed to send to doctor. Please try again.');
     } finally {
       setIsSending(false);
     }
@@ -91,65 +93,93 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
 
   if (isSent) {
     const tokenNumber = tokenInfo?.token || "---";
+    const parsedToken = parseInt(tokenNumber, 10);
     const roomNumber = tokenInfo?.room_number || "---";
     const assignedDoctor = tokenInfo?.doctor_name ? `Dr. ${tokenInfo.doctor_name}` : "Assigned Doctor";
     
     return (
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
+        initial={{ opacity: 0, y: 16 }}
         animate={{ opacity: 1, y: 0 }}
-        exit={{ opacity: 0, y: -20 }}
+        exit={{ opacity: 0, y: -16 }}
+        transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
         className="flex flex-col items-center justify-start p-6 sm:p-12 bg-slate-50 w-full h-full overflow-y-auto"
       >
-        <div className="bg-white/90 backdrop-blur-2xl p-8 sm:p-12 rounded-[2.5rem] shadow-2xl shadow-slate-200/50 border border-white w-full max-w-2xl text-center relative overflow-hidden my-auto shrink-0">
-          <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-emerald-400 to-teal-500" />
+        <div className="bg-white/95 backdrop-blur-2xl p-8 sm:p-12 rounded-[2.5rem] shadow-card-hover border border-slate-200/80 w-full max-w-2xl text-center relative overflow-hidden my-auto shrink-0">
+          <div className="absolute top-0 left-0 w-full h-3 bg-gradient-to-r from-emerald-400 via-teal-500 to-blue-500" />
+          
+          <div className="relative w-28 h-28 mx-auto mb-8">
+            <motion.div 
+              initial={{ scale: 0.6, opacity: 0 }}
+              animate={{ scale: [1, 1.4, 1.2], opacity: [0.6, 0.2, 0] }}
+              transition={{ duration: 1.2, repeat: Infinity, repeatDelay: 1.2 }}
+              className="absolute inset-0 rounded-full bg-emerald-400/40"
+            />
+            <motion.div 
+              initial={{ scale: 0 }}
+              animate={{ scale: 1 }}
+              transition={{ type: "spring", bounce: 0.5, delay: 0.2 }}
+              className="w-28 h-28 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center shadow-card ring-4 ring-emerald-500/15 relative z-10"
+            >
+              <CheckCircle2 className="w-14 h-14" />
+            </motion.div>
+          </div>
+          
+          <h2 className="text-3xl sm:text-5xl font-extrabold text-slate-900 mb-3 tracking-tight">{t('complete.sent_to_doctor')}</h2>
+          <p className="text-base sm:text-lg text-slate-600 mb-8 font-medium leading-relaxed">{t('complete.sent_to_doctor_desc')}</p>
           
           <motion.div 
-            initial={{ scale: 0 }}
-            animate={{ scale: 1 }}
-            transition={{ type: "spring", bounce: 0.5, delay: 0.2 }}
-            className="w-28 h-28 bg-emerald-50 text-emerald-500 rounded-full flex items-center justify-center mx-auto mb-8 shadow-inner ring-4 ring-emerald-500/10"
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.28, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="bg-slate-50/90 rounded-3xl p-6 sm:p-8 mb-8 border border-slate-200/80 grid grid-cols-1 sm:grid-cols-3 gap-6 shadow-card"
           >
-            <CheckCircle2 className="w-14 h-14" />
-          </motion.div>
-          
-          <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 mb-4 tracking-tighter">{t('complete.sent_to_doctor')}</h2>
-          <p className="text-lg text-slate-500 mb-10 font-medium">{t('complete.sent_to_doctor_desc')}</p>
-          
-          <div className="bg-slate-50/50 rounded-3xl p-8 mb-10 border border-slate-100 grid grid-cols-1 sm:grid-cols-3 gap-6 shadow-inner">
             <div>
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('complete.token_number')}</p>
-              <p className="text-4xl font-extrabold text-blue-600">{tokenNumber}</p>
+              <p className="text-4xl font-extrabold text-blue-600">
+                {!isNaN(parsedToken) ? (
+                  <AnimatedNumber value={parsedToken} duration={0.8} />
+                ) : (
+                  tokenNumber
+                )}
+              </p>
             </div>
-            <div className="sm:border-l sm:border-slate-200">
+            <div className="sm:border-l sm:border-slate-200/80">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('complete.room_number')}</p>
               <p className="text-4xl font-extrabold text-slate-800">{roomNumber}</p>
             </div>
-            <div className="sm:border-l sm:border-slate-200 flex flex-col justify-center">
+            <div className="sm:border-l sm:border-slate-200/80 flex flex-col justify-center">
               <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-2">{t('complete.doctor')}</p>
               <p className="text-2xl font-extrabold text-slate-800">{assignedDoctor}</p>
             </div>
-          </div>
+          </motion.div>
           
           {sessionId && (
             <LiquidButton
               onClick={() => window.open(`${getApiBaseUrl()}/api/summary/${sessionId}/pdf`, '_blank')}
-              className="w-full bg-emerald-600 text-white px-8 py-5 rounded-full font-extrabold hover:bg-emerald-700 transition-all text-xl shadow-xl shadow-emerald-600/20 active:scale-95 mb-4 flex items-center justify-center gap-3"
+              className="relative overflow-hidden w-full bg-emerald-600 hover:bg-emerald-700 text-white px-8 py-4 sm:py-5 rounded-full font-extrabold transition-[transform,background-color,box-shadow] duration-150 text-lg sm:text-xl shadow-card-hover hover:-translate-y-0.5 active:scale-[0.97] mb-3 flex items-center justify-center gap-3 cursor-pointer shadow-emerald-600/20"
             >
-              <FileText className="w-6 h-6" />
-              Download OP Casesheet (PDF)
+              <div className="absolute inset-0 shimmer-bg pointer-events-none" />
+              <FileText className="w-6 h-6 relative z-10" />
+              <span className="relative z-10">Download OP Casesheet (PDF)</span>
             </LiquidButton>
           )}
 
-          <LiquidButton
-            onClick={() => {
-              if (onReset) onReset();
-              navigate('/kiosk/login');
-            }}
-            className="w-full bg-slate-900 text-white px-8 py-5 rounded-full font-extrabold hover:bg-slate-800 transition-all text-xl shadow-xl shadow-slate-900/20 active:scale-95 mt-4"
+          <motion.div
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.3, delay: 0.5, ease: [0.16, 1, 0.3, 1] }}
           >
-            {t('complete.start_new_patient')}
-          </LiquidButton>
+            <LiquidButton
+              onClick={() => {
+                if (onReset) onReset();
+                navigate('/kiosk/login');
+              }}
+              className="w-full bg-blue-600 text-white px-8 py-4 sm:py-5 rounded-full font-extrabold hover:bg-blue-700 transition-[transform,background-color,box-shadow] duration-150 text-lg sm:text-xl shadow-card-hover hover:-translate-y-0.5 active:scale-[0.97] mt-3 cursor-pointer shadow-blue-600/20"
+            >
+              {t('complete.start_new_patient')}
+            </LiquidButton>
+          </motion.div>
         </div>
       </motion.div>
     );
@@ -157,9 +187,10 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
       className="flex flex-col flex-1 items-center p-6 sm:p-12 bg-slate-50 w-full h-full relative overflow-y-auto custom-scrollbar"
     >
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-blue-50 via-transparent to-transparent pointer-events-none" />
@@ -167,7 +198,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
       <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 mb-4 tracking-tighter">
         {t('complete.intake_complete')}, {patientName ? patientName.split(' ')[0] : 'Patient'}
       </h2>
-      <p className="text-xl text-slate-500 font-medium mb-10 max-w-lg text-center">
+      <p className="text-xl text-slate-600 font-medium mb-10 max-w-lg text-center">
         {t('complete.review_summary_desc')}
       </p>
 
@@ -186,23 +217,23 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
             </div>
             <div>
               <h3 className="text-2xl font-extrabold text-slate-800 tracking-tight">{patientName || t('complete.unknown_patient')}</h3>
-              <p className="text-base text-slate-500 font-semibold mt-1">{age ? `${age} yrs` : t('complete.age_na')} • {gender || t('complete.gender_na')}</p>
+              <p className="text-base text-slate-600 font-semibold mt-1">{age ? `${age} yrs` : t('complete.age_na')} • {gender || t('complete.gender_na')}</p>
             </div>
           </div>
           
           <div className="flex gap-6 sm:text-right bg-slate-50 p-4 rounded-2xl shadow-soft-2 border-none">
             <div>
-              <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">{t('complete.weight')}</p>
+              <p className="text-xs uppercase font-bold tracking-widest text-slate-500 mb-1">{t('complete.weight')}</p>
               <p className="text-lg font-extrabold text-slate-700">{weight}</p>
             </div>
             <div className="w-px bg-slate-200" />
             <div>
-              <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">{t('complete.height')}</p>
+              <p className="text-xs uppercase font-bold tracking-widest text-slate-500 mb-1">{t('complete.height')}</p>
               <p className="text-lg font-extrabold text-slate-700">{height}</p>
             </div>
             <div className="w-px bg-slate-200" />
             <div>
-              <p className="text-xs uppercase font-bold tracking-widest text-slate-400 mb-1">{t('complete.vitals')}</p>
+              <p className="text-xs uppercase font-bold tracking-widest text-slate-500 mb-1">{t('complete.vitals')}</p>
               <p className="text-lg font-extrabold text-slate-700">{vitals}</p>
             </div>
           </div>
@@ -210,7 +241,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
 
         {/* Chief Complaint */}
         <div className="mb-8">
-          <h4 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+          <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3 flex items-center gap-2">
             <Activity className="w-4 h-4 text-red-400" />
             {t('complete.chief_complaint')}
           </h4>
@@ -222,7 +253,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
         {/* Collected Details */}
         {hasClinicalDetails && (
           <div className="mb-6">
-            <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+            <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
               <FileText className="w-4 h-4" />
               {t('complete.clinical_details')}
             </h4>
@@ -235,10 +266,10 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
                 
                 return (
                   <div key={key} className="bg-slate-50 p-3 rounded-xl shadow-soft-2 border-none">
-                    <p className="text-xs font-semibold text-slate-500 mb-1 capitalize">{label}</p>
+                    <p className="text-xs font-semibold text-slate-600 mb-1 capitalize">{label}</p>
                     <p className="text-sm font-medium text-slate-900">{String(data.value)}</p>
                     {data.verbatim && String(data.verbatim) !== String(data.value) && (
-                      <p className="text-xs italic text-slate-400 mt-1 flex items-start gap-1">
+                      <p className="text-xs italic text-slate-500 mt-1 flex items-start gap-1">
                         <span className="opacity-50">"</span>{String(data.verbatim)}<span className="opacity-50">"</span>
                       </p>
                     )}
@@ -252,7 +283,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
         {/* Document Info */}
         {documents.length > 0 && (
           <div>
-             <h4 className="text-sm font-bold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+             <h4 className="text-sm font-bold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
                <FileText className="w-4 h-4" />
                {t('complete.attached_documents')}
              </h4>
@@ -281,7 +312,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
                       </div>
                     ) : (
                       <div className="md:w-1/3 bg-slate-100 shrink-0 flex items-center justify-center p-6 border-r border-slate-200">
-                        <p className="text-slate-400 text-sm font-medium">{t('complete.no_image')}</p>
+                        <p className="text-slate-500 text-sm font-medium">{t('complete.no_image')}</p>
                       </div>
                     )}
                     
@@ -289,7 +320,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
                     <div className="p-4 md:w-2/3 space-y-4">
                       {meds.length > 0 && (
                         <div>
-                          <h5 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 mb-1"><Pill className="w-3 h-3"/> {t('complete.medications')}</h5>
+                          <h5 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1 mb-1"><Pill className="w-3 h-3"/> {t('complete.medications')}</h5>
                           <div className="flex flex-wrap gap-1">
                             {meds.map((m: any, j: number) => <span key={j} className="text-xs font-semibold bg-teal-50 text-teal-700 px-2 py-1 rounded border border-teal-100">{m?.drug_name || m}</span>)}
                           </div>
@@ -298,7 +329,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
                       
                       {diags.length > 0 && (
                         <div>
-                          <h5 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 mb-1"><AlertTriangle className="w-3 h-3"/> {t('complete.diagnoses')}</h5>
+                          <h5 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1 mb-1"><AlertTriangle className="w-3 h-3"/> {t('complete.diagnoses')}</h5>
                           <div className="flex flex-wrap gap-1">
                             {diags.map((d: any, j: number) => <span key={j} className="text-xs font-semibold bg-purple-50 text-purple-700 px-2 py-1 rounded border border-purple-100">{d?.condition_name || d}</span>)}
                           </div>
@@ -307,7 +338,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
                       
                       {labs.length > 0 && (
                         <div>
-                          <h5 className="text-xs font-bold text-slate-400 uppercase flex items-center gap-1 mb-1"><TestTube className="w-3 h-3"/> {t('complete.lab_results')}</h5>
+                          <h5 className="text-xs font-bold text-slate-500 uppercase flex items-center gap-1 mb-1"><TestTube className="w-3 h-3"/> {t('complete.lab_results')}</h5>
                           <ul className="space-y-1">
                             {labs.map((l: any, j: number) => (
                               <li key={j} className="text-xs font-medium text-slate-700 flex justify-between bg-white px-2 py-1 border border-slate-100 rounded">
@@ -330,12 +361,12 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
       <LiquidButton
         onClick={handleSendToDoctor}
         disabled={isSending}
-        className="w-full max-w-4xl bg-blue-600 text-white px-8 py-6 rounded-full font-extrabold hover:bg-blue-700 transition-all shadow-xl shadow-blue-600/30 text-xl flex items-center justify-center gap-4 disabled:bg-slate-300 disabled:shadow-none mb-10 shrink-0 active:scale-95 cursor-pointer"
+        className="w-full max-w-4xl bg-blue-600 text-white px-8 py-5 sm:py-6 rounded-full font-extrabold hover:bg-blue-700 transition-[transform,background-color,box-shadow] duration-150 shadow-card-hover hover:-translate-y-0.5 text-lg sm:text-xl flex items-center justify-center gap-4 disabled:bg-slate-300 disabled:shadow-none mb-10 shrink-0 active:scale-[0.97] cursor-pointer shadow-blue-600/20"
       >
         {isSending ? (
           <div className="w-7 h-7 border-4 border-white/30 border-t-white rounded-full animate-spin" />
         ) : (
-          <Send className="w-7 h-7" />
+          <Send className="w-6 h-6 sm:w-7 sm:h-7" />
         )}
         {isSending ? t('complete.transmitting') : t('complete.send_to_doctor')}
       </LiquidButton>

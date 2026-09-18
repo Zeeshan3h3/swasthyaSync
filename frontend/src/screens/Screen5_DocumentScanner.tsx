@@ -26,9 +26,10 @@ function DynamicLoadingText() {
   return (
     <motion.span 
       key={index}
-      initial={{ opacity: 0, y: 5 }}
+      initial={{ opacity: 0, y: -4 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -5 }}
+      exit={{ opacity: 0, y: 4 }}
+      transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
       className="text-xs font-bold text-blue-900 uppercase tracking-wider"
     >
       {messages[index]}
@@ -106,88 +107,108 @@ export function Screen5_DocumentScanner({ onNext, onSkip }: Props) {
 
   return (
     <motion.div 
-      initial={{ opacity: 0, y: 20 }}
+      initial={{ opacity: 0, y: 16 }}
       animate={{ opacity: 1, y: 0 }}
-      exit={{ opacity: 0, y: -20 }}
+      exit={{ opacity: 0, y: -16 }}
+      transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
       className="flex flex-col flex-1 p-6 sm:p-12 items-center text-center h-full"
     >
-      <div className="w-full max-w-3xl mb-12">
-        <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 mb-4 tracking-tighter">{t('docs.title')}</h2>
-        <p className="text-xl text-slate-500 font-medium max-w-2xl mx-auto">
+      <div className="w-full max-w-3xl mb-8 sm:mb-12">
+        <h2 className="text-3xl sm:text-5xl font-extrabold text-slate-900 mb-3 sm:mb-4 tracking-tight">{t('docs.title')}</h2>
+        <p className="text-base sm:text-xl text-slate-600 font-medium max-w-2xl mx-auto leading-relaxed">
           {t('docs.subtitle')}
         </p>
       </div>
 
       <div className="flex-1 w-full max-w-3xl flex flex-col justify-center relative">
         <input 
-              type="file" 
-              accept="image/*,.pdf" 
-              className="hidden" 
-              ref={fileInputRef} 
-              multiple
-              onChange={handleFileChange} 
-            />
-            <input 
-              type="file" 
-              accept="image/*" 
-              capture="environment" 
-              className="hidden" 
-              ref={cameraInputRef} 
-              multiple
-              onChange={handleFileChange} 
-            />
+          type="file" 
+          accept="image/*,.pdf" 
+          className="hidden" 
+          ref={fileInputRef} 
+          multiple
+          onChange={handleFileChange} 
+        />
+        <input 
+          type="file" 
+          accept="image/*" 
+          capture="environment" 
+          className="hidden" 
+          ref={cameraInputRef} 
+          multiple
+          onChange={handleFileChange} 
+        />
 
         {files.length === 0 ? (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 h-full max-h-[400px]">
-            {/* Camera Option */}
-            <LiquidButton
-              onClick={() => cameraInputRef.current?.click()}
-              className="group flex flex-col items-center justify-center bg-slate-50 rounded-[2rem] p-8 shadow-soft-1 hover:shadow-soft-2 transition-all duration-300 border-none"
+            {/* Camera Option — Slides from left */}
+            <motion.div
+              initial={{ opacity: 0, x: -16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             >
-              <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-inner">
-                <Camera className="w-10 h-10 text-blue-600" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('docs.take_photo')}</h3>
-              <p className="text-slate-500 font-medium">{t('docs.hold_document')}</p>
-            </LiquidButton>
+              <LiquidButton
+                onClick={() => cameraInputRef.current?.click()}
+                className="group w-full h-full flex flex-col items-center justify-center bg-white border border-slate-200/80 rounded-[2rem] p-8 shadow-card hover:shadow-card-hover hover:-translate-y-1 active:scale-[0.97] transition-[transform,box-shadow,background-color] duration-150 cursor-pointer"
+              >
+                <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-200 shadow-inner">
+                  <Camera className="w-10 h-10 text-blue-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('docs.take_photo')}</h3>
+                <p className="text-slate-500 font-medium">{t('docs.hold_document')}</p>
+              </LiquidButton>
+            </motion.div>
 
-            {/* Upload Option */}
-            <LiquidButton
-              onClick={() => fileInputRef.current?.click()}
-              className="group flex flex-col items-center justify-center bg-slate-50 rounded-[2rem] p-8 shadow-soft-1 hover:shadow-soft-2 transition-all duration-300 border-none"
+            {/* Upload Option — Slides from right */}
+            <motion.div
+              initial={{ opacity: 0, x: 16 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
             >
-              <div className="w-20 h-20 bg-teal-100 rounded-full flex items-center justify-center mb-6 group-hover:scale-110 transition-transform duration-300 shadow-inner">
-                <UploadCloud className="w-10 h-10 text-teal-600" />
-              </div>
-              <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('docs.upload_file')}</h3>
-              <p className="text-slate-500 font-medium">{t('docs.pdf_or_image')} (Max 5)</p>
-            </LiquidButton>
+              <LiquidButton
+                onClick={() => fileInputRef.current?.click()}
+                className="group w-full h-full flex flex-col items-center justify-center bg-white border border-slate-200/80 rounded-[2rem] p-8 shadow-card hover:shadow-card-hover hover:-translate-y-1 active:scale-[0.97] transition-[transform,box-shadow,background-color] duration-150 cursor-pointer"
+              >
+                <div className="w-20 h-20 bg-emerald-50 rounded-full flex items-center justify-center mb-6 group-hover:scale-105 transition-transform duration-200 shadow-inner">
+                  <UploadCloud className="w-10 h-10 text-emerald-600" />
+                </div>
+                <h3 className="text-2xl font-bold text-slate-800 mb-2">{t('docs.upload_file')}</h3>
+                <p className="text-slate-500 font-medium">{t('docs.pdf_or_image')} (Max 5)</p>
+              </LiquidButton>
+            </motion.div>
           </div>
         ) : (
           <motion.div 
-            initial={{ scale: 0.95, opacity: 0 }}
+            initial={{ scale: 0.98, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
-            className="flex flex-col items-center justify-center bg-slate-50 rounded-[2.5rem] p-8 shadow-soft-2 h-full max-h-[400px] relative overflow-hidden border-none"
+            transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            className="flex flex-col items-center justify-center bg-white rounded-[2.5rem] p-8 shadow-card-hover h-full max-h-[400px] relative overflow-hidden border border-slate-200/80"
           >
             <LiquidButton
               onClick={handleClear}
               disabled={isProcessing}
-              className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-red-100 hover:text-red-600 text-slate-500 rounded-full transition-colors disabled:opacity-50"
+              className="absolute top-4 right-4 p-2 bg-slate-100 hover:bg-red-100 hover:text-red-600 text-slate-600 rounded-full transition-colors active:scale-[0.97] disabled:opacity-50 cursor-pointer shadow-2xs"
             >
               <X className="w-6 h-6" />
             </LiquidButton>
 
             <div className="flex flex-wrap justify-center gap-4 w-full h-full overflow-y-auto pt-8">
               {previews.map((prev, idx) => (
-                <div key={idx} className="w-32 h-32 sm:w-40 sm:h-40 rounded-xl overflow-hidden border-2 border-slate-200 relative shrink-0 shadow-sm">
+                <motion.div 
+                  key={idx}
+                  initial={{ opacity: 0, scale: 0.92 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 0.2, delay: idx * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                  className="w-32 h-32 sm:w-40 sm:h-40 rounded-xl overflow-hidden border-2 border-slate-200 relative shrink-0 shadow-card"
+                >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={prev} alt={`Preview ${idx+1}`} className="w-full h-full object-cover" />
-                </div>
+                </motion.div>
               ))}
             </div>
 
             {isProcessing && (
-              <div className="absolute inset-0 bg-white/70 backdrop-blur-md z-10 flex flex-col items-center justify-center p-4 text-center">
+              <div className="absolute inset-0 bg-white/80 backdrop-blur-md z-10 flex flex-col items-center justify-center p-4 text-center">
                 <Loader2 className="w-10 h-10 text-blue-600 animate-spin mb-3" />
                 <DynamicLoadingText />
               </div>
@@ -209,20 +230,20 @@ export function Screen5_DocumentScanner({ onNext, onSkip }: Props) {
         )}
       </div>
 
-      <div className="mt-auto pt-10 w-full max-w-4xl flex gap-6">
+      <div className="mt-auto pt-8 sm:pt-10 w-full max-w-4xl flex gap-4 sm:gap-6">
         <LiquidButton
           onClick={onSkip}
           disabled={isProcessing}
-          className="group flex items-center justify-center gap-2 px-8 py-5 rounded-full font-extrabold text-slate-500 bg-slate-100 hover:bg-slate-200 transition-all w-1/3 text-lg disabled:opacity-50 cursor-pointer"
+          className="group flex items-center justify-center gap-2 px-6 sm:px-8 py-4 sm:py-5 rounded-full font-extrabold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-[transform,background-color] duration-150 active:scale-[0.97] w-1/3 text-base sm:text-lg disabled:opacity-50 cursor-pointer shadow-2xs"
         >
           {t('docs.skip')}
         </LiquidButton>
         <LiquidButton
           onClick={handleSubmit}
           disabled={files.length === 0 || isProcessing}
-          className={`group relative flex-1 overflow-hidden flex items-center justify-center gap-3 rounded-full py-5 font-extrabold shadow-2xl transition-all transform active:scale-95 text-xl cursor-pointer ${
+          className={`group relative flex-1 overflow-hidden flex items-center justify-center gap-3 rounded-full py-4 sm:py-5 font-extrabold shadow-card-hover transition-[transform,background-color,box-shadow] duration-150 transform active:scale-[0.97] text-lg sm:text-xl cursor-pointer ${
             files.length > 0 && !isProcessing
-              ? 'bg-slate-900 text-white hover:bg-slate-800 shadow-slate-900/20'
+              ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-blue-600/20 hover:shadow-blue-600/30'
               : 'bg-slate-200 text-slate-400 cursor-not-allowed shadow-none'
           }`}
         >
@@ -235,7 +256,7 @@ export function Screen5_DocumentScanner({ onNext, onSkip }: Props) {
             <>
               <span className="relative z-10 flex items-center gap-2">
                 {t('docs.process_document')}
-                <ArrowRight className="w-6 h-6 group-hover:translate-x-2 transition-transform" />
+                <ArrowRight className="w-5 h-5 sm:w-6 sm:h-6 group-hover:translate-x-1.5 transition-transform" />
               </span>
             </>
           )}
