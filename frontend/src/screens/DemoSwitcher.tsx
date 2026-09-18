@@ -1,6 +1,6 @@
 import React, { useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MonitorSmartphone, ActivitySquare, Stethoscope, ShieldCheck, ExternalLink, Wifi, FileText, Lock, Scale, Info, CheckCircle2, Send, Code2, Link2, MessageCircle, Globe, Mail, Phone, MapPin, Heart } from 'lucide-react';
+import { MonitorSmartphone, ActivitySquare, Stethoscope, ShieldCheck, ExternalLink, Wifi, FileText, Lock, Scale, Info, CheckCircle2, Send, Code2, Link2, MessageCircle, Globe, Mail, Phone, MapPin, Heart, Sparkles, Bot, Clock, Scan } from 'lucide-react';
 import { motion, useScroll, useTransform, useSpring } from 'framer-motion';
 import QRCode from 'react-qr-code';
 import logoPNG from '../assets/logoPNG.png';
@@ -166,46 +166,114 @@ export const DemoSwitcher: React.FC = () => {
               transition={{ delay: 0.3, duration: 0.5 }}
               className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-12"
             >
-              {modules.map((mod, idx) => (
-                <motion.button
-                  key={idx}
-                  onClick={() => {
-                    if (mod.isExternal) {
-                      window.open(mod.path, '_blank');
-                    } else {
-                      navigate(mod.path);
-                    }
-                  }}
-                  initial={{ opacity: 0, y: 16 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 + idx * 0.05, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
-                  whileHover={{ y: -3, scale: 1.008 }}
-                  whileTap={{ scale: 0.97 }}
-                  className={`
-                    group flex items-start text-left p-5 sm:p-6 rounded-2xl border-2 ${mod.borderColor}
-                    bg-white shadow-card
-                    transition-[transform,box-shadow,border-color] duration-150 cursor-pointer
-                    ${mod.hoverBorder} ${mod.shadowColor} hover:shadow-card-hover
-                  `}
-                >
-                  {/* Icon */}
-                  <div className={`p-3.5 rounded-xl mr-4 sm:mr-5 ${mod.iconBg} transition-transform duration-200 group-hover:scale-105 shrink-0`}>
-                    {mod.icon}
-                  </div>
+              {modules.map((mod, idx) => {
+                if (mod.isExternal) {
+                  return (
+                    <motion.button
+                      key={idx}
+                      onClick={() => window.open(mod.path, '_blank')}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 + idx * 0.05, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                      whileHover={{ y: -3, scale: 1.006 }}
+                      whileTap={{ scale: 0.98 }}
+                      className="col-span-1 md:col-span-2 group flex flex-col sm:flex-row items-center sm:items-start text-left p-6 sm:p-7 rounded-3xl border-2 border-indigo-200/90 bg-gradient-to-br from-white via-indigo-50/30 to-blue-50/50 shadow-card hover:border-indigo-400 hover:shadow-indigo-200/50 hover:shadow-card-hover transition-[transform,box-shadow,border-color] duration-150 cursor-pointer gap-6 relative overflow-hidden"
+                    >
+                      {/* Decorative ambient orbs */}
+                      <div className="absolute top-0 right-0 w-64 h-64 bg-gradient-to-bl from-indigo-200/25 via-blue-200/20 to-transparent rounded-bl-full pointer-events-none" />
+                      <div className="absolute bottom-0 left-1/3 w-48 h-48 bg-purple-200/15 rounded-full blur-2xl pointer-events-none" />
 
-                  {/* Text */}
-                  <div className="flex-1 min-w-0">
-                    <h2 className="text-slate-800 font-extrabold text-base sm:text-lg mb-1">{mod.title}</h2>
-                    <p className="text-slate-500 text-sm font-medium leading-relaxed">
-                      {mod.description}
-                    </p>
-                    <div className="mt-3 flex items-center gap-1 text-xs font-semibold text-slate-400 group-hover:text-slate-600 transition-colors">
-                      <span>Open Module</span>
-                      <ExternalLink className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+                      {/* Prominent QR Code with SCAN ME badge */}
+                      <div className="flex flex-col items-center gap-2 shrink-0 relative z-10">
+                        <div className="p-3 bg-white rounded-2xl border-2 border-indigo-200/90 shadow-sm group-hover:scale-105 transition-transform duration-200">
+                          <QRCode value={mod.path} size={92} className="rounded-lg" />
+                        </div>
+                        <span className="inline-flex items-center gap-1 text-[11px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-sm animate-pulse">
+                          <Scan className="w-3 h-3" />
+                          SCAN ME
+                        </span>
+                      </div>
+
+                      {/* Content & AI Assistant Highlight */}
+                      <div className="flex-1 min-w-0 text-center sm:text-left relative z-10">
+                        <div className="flex items-center justify-center sm:justify-start gap-2 mb-2 flex-wrap">
+                          <span className="inline-flex items-center gap-1.5 px-3 py-0.5 rounded-full text-xs font-black bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 text-white shadow-xs">
+                            <Sparkles className="w-3.5 h-3.5" />
+                            AI Medical Assistant Live
+                          </span>
+                          <span className="text-[11px] font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-200 flex items-center gap-1">
+                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                            Live OPD Queue Sync
+                          </span>
+                        </div>
+
+                        <h2 className="text-slate-900 font-extrabold text-xl sm:text-2xl mb-1.5 tracking-tight group-hover:text-blue-600 transition-colors">
+                          {mod.title}
+                        </h2>
+                        <p className="text-slate-600 text-sm font-medium leading-relaxed mb-4">
+                          Scan the QR code on your phone to open your mobile health companion: consult 1-on-1 with our intelligent <strong className="text-indigo-600">AI Medical Assistant</strong>, monitor your real-time OPD queue token status, and review consultation history.
+                        </p>
+
+                        {/* Feature Badges */}
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 mb-4">
+                          <div className="flex items-center gap-2 p-2 rounded-xl bg-white/90 border border-indigo-100 shadow-2xs text-xs font-bold text-slate-700">
+                            <Bot className="w-4 h-4 text-indigo-600 shrink-0" />
+                            <span>24/7 AI Health Chat</span>
+                          </div>
+                          <div className="flex items-center gap-2 p-2 rounded-xl bg-white/90 border border-indigo-100 shadow-2xs text-xs font-bold text-slate-700">
+                            <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
+                            <span>Live Queue Tracker</span>
+                          </div>
+                          <div className="flex items-center gap-2 p-2 rounded-xl bg-white/90 border border-indigo-100 shadow-2xs text-xs font-bold text-slate-700">
+                            <FileText className="w-4 h-4 text-blue-600 shrink-0" />
+                            <span>Digital OP Records</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-center sm:justify-start gap-1.5 text-xs font-bold text-blue-600 group-hover:text-blue-700 transition-colors">
+                          <span>Open Patient Portal on Web</span>
+                          <ExternalLink className="w-3.5 h-3.5 transition-transform group-hover:translate-x-0.5" />
+                        </div>
+                      </div>
+                    </motion.button>
+                  );
+                }
+
+                return (
+                  <motion.button
+                    key={idx}
+                    onClick={() => navigate(mod.path)}
+                    initial={{ opacity: 0, y: 16 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 + idx * 0.05, duration: 0.25, ease: [0.16, 1, 0.3, 1] }}
+                    whileHover={{ y: -3, scale: 1.008 }}
+                    whileTap={{ scale: 0.97 }}
+                    className={`
+                      group flex items-start text-left p-5 sm:p-6 rounded-2xl border-2 ${mod.borderColor}
+                      bg-white shadow-card
+                      transition-[transform,box-shadow,border-color] duration-150 cursor-pointer
+                      ${mod.hoverBorder} ${mod.shadowColor} hover:shadow-card-hover
+                    `}
+                  >
+                    {/* Icon */}
+                    <div className={`p-3.5 rounded-xl mr-4 sm:mr-5 ${mod.iconBg} transition-transform duration-200 group-hover:scale-105 shrink-0`}>
+                      {mod.icon}
                     </div>
-                  </div>
-                </motion.button>
-              ))}
+
+                    {/* Text */}
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-slate-800 font-extrabold text-base sm:text-lg mb-1">{mod.title}</h2>
+                      <p className="text-slate-500 text-sm font-medium leading-relaxed">
+                        {mod.description}
+                      </p>
+                      <div className="mt-3 flex items-center gap-1 text-xs font-semibold text-slate-400 group-hover:text-slate-600 transition-colors">
+                        <span>Open Module</span>
+                        <ExternalLink className="w-3 h-3 transition-transform group-hover:translate-x-0.5" />
+                      </div>
+                    </div>
+                  </motion.button>
+                );
+              })}
             </motion.div>
 
             {/* ─── System Guide & Privacy Terms ─── */}
