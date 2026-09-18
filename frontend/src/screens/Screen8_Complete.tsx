@@ -36,12 +36,12 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
         .then(data => {
           if (data.token) {
             setTokenInfo(data);
-            speak('token_gen', { token: String(data.token), dest: data.doctor_name || 'the doctor' });
+            speak('token_gen', { token: String(data.token), dest: data.doctor_name || 'the doctor' }, 1);
           }
         })
         .catch(console.error);
     }
-  }, [sessionId]);
+  }, [sessionId, speak]);
   
   const rawName = patientRecord?.patient_name;
   const patientName = typeof rawName === 'string' ? rawName : '';
@@ -76,6 +76,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
   });
 
   const handleSendToDoctor = async () => {
+    stop();
     setIsSending(true);
     try {
       if (sessionId) {
@@ -245,6 +246,7 @@ export function Screen8_Complete({ onReset, patientRecord, sessionId }: Props) {
           >
             <LiquidButton
               onClick={() => {
+                stop();
                 if (onReset) onReset();
                 navigate('/kiosk/login');
               }}

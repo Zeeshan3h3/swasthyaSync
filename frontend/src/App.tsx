@@ -17,9 +17,21 @@ import { DoctorQueue } from './screens/DoctorQueue';
 import { DoctorDashboard } from './screens/DoctorDashboard';
 import { AdminPanel } from './screens/AdminPanel';
 import { getApiBaseUrl } from './config';
-import { AudioGuideProvider } from './context/AudioGuideContext';
+import { AudioGuideProvider, useAudioGuideContext } from './context/AudioGuideContext';
 
 const API_BASE_URL = getApiBaseUrl();
+
+// Global Route Audio Terminator to immediately stop all kiosk audio on navigation
+function AudioRouteTerminator() {
+  const location = useLocation();
+  const { stopAllAudio } = useAudioGuideContext();
+
+  useEffect(() => {
+    stopAllAudio();
+  }, [location.pathname, stopAllAudio]);
+
+  return null;
+}
 
 // Route Sync Component
 function RouteSynchronizer({ ui, pendingSession }: { ui: any, pendingSession: any }) {
@@ -141,6 +153,7 @@ function KioskApp() {
 
   return (
     <AudioGuideProvider>
+      <AudioRouteTerminator />
       <Layout isConnected={isConnected} isKioskInterview={isInterview}>
         <RouteSynchronizer ui={ui} pendingSession={pendingSession} />
       

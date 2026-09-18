@@ -296,7 +296,17 @@ export function Login({ onSessionStarted }: Props) {
   const [selectedDoctor, setSelectedDoctor] = useState(saved?.selectedDoctor || '');
   const [doctors, setDoctors] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
-  const { language, setLanguage, setUiLang, speak, stop, isSpeaking } = useAudioGuide();
+  const {
+    language,
+    setLanguage,
+    setUiLang,
+    speak,
+    stop,
+    isSpeaking,
+    isMuted,
+    registerAudioElement,
+    registerAbortController,
+  } = useAudioGuide();
   const [activeConsentAudio, setActiveConsentAudio] = useState<ConsentKey | null>(null);
   const wasSpeakingRef = useRef(false);
 
@@ -307,25 +317,40 @@ export function Login({ onSessionStarted }: Props) {
 
   const stopWelcomeLoop = useCallback(() => {
     if (welcomeLoopAbortRef.current) {
-      welcomeLoopAbortRef.current.abort();
+      try {
+        welcomeLoopAbortRef.current.abort();
+      } catch {}
       welcomeLoopAbortRef.current = null;
     }
+    registerAbortController(null);
+
     if (welcomeAudioRef.current) {
       welcomeAudioRef.current.onended = null;
       welcomeAudioRef.current.onerror = null;
-      welcomeAudioRef.current.pause();
-      welcomeAudioRef.current.src = '';
+      try {
+        welcomeAudioRef.current.pause();
+        welcomeAudioRef.current.src = '';
+      } catch {}
       welcomeAudioRef.current = null;
     }
+    registerAudioElement(null);
+
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
+      try {
+        window.speechSynthesis.cancel();
+      } catch {}
     }
     setActiveSpeakingLang(null);
-  }, []);
+  }, [registerAudioElement, registerAbortController]);
 
   const playSingleWelcome = useCallback(async (item: WelcomeLangItem) => {
     stopWelcomeLoop();
+    if (isMuted) return;
+
     setActiveSpeakingLang(item.id);
+    const abortController = new AbortController();
+    welcomeLoopAbortRef.current = abortController;
+    registerAbortController(abortController);
 
     try {
       const formData = new FormData();
@@ -335,28 +360,35 @@ export function Login({ onSessionStarted }: Props) {
       const resp = await fetch(`${getApiBaseUrl()}/api/tts`, {
         method: 'POST',
         body: formData,
+        signal: abortController.signal,
       });
 
       if (resp.ok) {
         const blob = await resp.blob();
+        if (abortController.signal.aborted || isMuted) return;
+
         const blobUrl = URL.createObjectURL(blob);
         const audio = new Audio(blobUrl);
         welcomeAudioRef.current = audio;
+        registerAudioElement(audio);
 
         audio.onended = () => {
           URL.revokeObjectURL(blobUrl);
           welcomeAudioRef.current = null;
+          registerAudioElement(null);
           setActiveSpeakingLang(null);
         };
         audio.onerror = () => {
           URL.revokeObjectURL(blobUrl);
           welcomeAudioRef.current = null;
+          registerAudioElement(null);
           setActiveSpeakingLang(null);
         };
 
         await audio.play().catch(() => {
           URL.revokeObjectURL(blobUrl);
           welcomeAudioRef.current = null;
+          registerAudioElement(null);
           setActiveSpeakingLang(null);
         });
         return;
@@ -365,63 +397,76 @@ export function Login({ onSessionStarted }: Props) {
       // Continue to fallback
     }
 
+    if (abortController.signal.aborted || isMuted) return;
+
     if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      const utt = new SpeechSynthesisUtterance(item.welcomePrompt);
-      utt.lang = item.ttsLang;
-      utt.rate = 0.95;
-      const voices = window.speechSynthesis.getVoices();
-      const langPrefix = item.ttsLang.slice(0, 2).toLowerCase();
-      const matchingVoice = voices.find(v => {
-        const vLang = v.lang.toLowerCase().replace('_', '-');
-        return vLang.startsWith(langPrefix) ||
-          (langPrefix === 'bn' && (v.name.toLowerCase().includes('bengali') || v.name.toLowerCase().includes('bangla')));
-      });
-      if (matchingVoice) utt.voice = matchingVoice;
-      utt.onend = () => setActiveSpeakingLang(null);
-      utt.onerror = () => setActiveSpeakingLang(null);
-      window.speechSynthesis.speak(utt);
+      try {
+        window.speechSynthesis.cancel();
+        const utt = new SpeechSynthesisUtterance(item.welcomePrompt);
+        utt.lang = item.ttsLang;
+        utt.rate = 0.95;
+        const voices = window.speechSynthesis.getVoices();
+        const langPrefix = item.ttsLang.slice(0, 2).toLowerCase();
+        const matchingVoice = voices.find(v => {
+          const vLang = v.lang.toLowerCase().replace('_', '-');
+          return vLang.startsWith(langPrefix) ||
+            (langPrefix === 'bn' && (v.name.toLowerCase().includes('bengali') || v.name.toLowerCase().includes('bangla')));
+        });
+        if (matchingVoice) utt.voice = matchingVoice;
+        utt.onend = () => setActiveSpeakingLang(null);
+        utt.onerror = () => setActiveSpeakingLang(null);
+        window.speechSynthesis.speak(utt);
+      } catch {
+        setActiveSpeakingLang(null);
+      }
     } else {
       setActiveSpeakingLang(null);
     }
-  }, [stopWelcomeLoop]);
+  }, [stopWelcomeLoop, isMuted, registerAbortController, registerAudioElement]);
 
   const handleSelectLanguage = useCallback((langId: 'en' | 'hi' | 'bn') => {
     stopWelcomeLoop();
+    stop();
     const langItem = KIOSK_LANGUAGES.find((l) => l.id === langId);
     if (langItem) {
       setLanguage(langItem.ttsLang);
       setUiLang(langItem.id);
     }
     setStep('CONSENT');
-  }, [stopWelcomeLoop, setLanguage, setUiLang]);
+  }, [stopWelcomeLoop, stop, setLanguage, setUiLang]);
 
   // Audio loop for WELCOME_LANGUAGE
   useEffect(() => {
-    if (step !== 'WELCOME_LANGUAGE') {
+    if (step !== 'WELCOME_LANGUAGE' || isMuted) {
       stopWelcomeLoop();
       return;
     }
 
     const abortController = new AbortController();
     welcomeLoopAbortRef.current = abortController;
+    registerAbortController(abortController);
     let isCancelled = false;
 
     const playPromptAsync = (item: WelcomeLangItem): Promise<boolean> => {
       return new Promise((resolve) => {
-        if (abortController.signal.aborted || isCancelled) return resolve(false);
+        if (abortController.signal.aborted || isCancelled || isMuted) return resolve(false);
         setActiveSpeakingLang(item.id);
 
         const cleanUp = () => {
           if (welcomeAudioRef.current) {
             welcomeAudioRef.current.onended = null;
             welcomeAudioRef.current.onerror = null;
-            welcomeAudioRef.current.pause();
-            welcomeAudioRef.current.src = '';
+            try {
+              welcomeAudioRef.current.pause();
+              welcomeAudioRef.current.src = '';
+            } catch {}
             welcomeAudioRef.current = null;
           }
+          registerAudioElement(null);
           if ('speechSynthesis' in window) {
-            window.speechSynthesis.cancel();
+            try {
+              window.speechSynthesis.cancel();
+            } catch {}
           }
         };
 
@@ -442,47 +487,55 @@ export function Login({ onSessionStarted }: Props) {
           .then(async (resp) => {
             if (!resp.ok) throw new Error('TTS error');
             const blob = await resp.blob();
-            if (abortController.signal.aborted || isCancelled) return resolve(false);
+            if (abortController.signal.aborted || isCancelled || isMuted) return resolve(false);
 
             const blobUrl = URL.createObjectURL(blob);
             const audio = new Audio(blobUrl);
             welcomeAudioRef.current = audio;
+            registerAudioElement(audio);
 
             audio.onended = () => {
               URL.revokeObjectURL(blobUrl);
               welcomeAudioRef.current = null;
+              registerAudioElement(null);
               resolve(true);
             };
             audio.onerror = () => {
               URL.revokeObjectURL(blobUrl);
               welcomeAudioRef.current = null;
+              registerAudioElement(null);
               resolve(true);
             };
 
             await audio.play().catch(() => {
               URL.revokeObjectURL(blobUrl);
               welcomeAudioRef.current = null;
+              registerAudioElement(null);
               resolve(true);
             });
           })
           .catch(() => {
-            if (abortController.signal.aborted || isCancelled) return resolve(false);
+            if (abortController.signal.aborted || isCancelled || isMuted) return resolve(false);
             if ('speechSynthesis' in window) {
-              window.speechSynthesis.cancel();
-              const utt = new SpeechSynthesisUtterance(item.welcomePrompt);
-              utt.lang = item.ttsLang;
-              utt.rate = 0.95;
-              const voices = window.speechSynthesis.getVoices();
-              const langPrefix = item.ttsLang.slice(0, 2).toLowerCase();
-              const matchingVoice = voices.find(v => {
-                const vLang = v.lang.toLowerCase().replace('_', '-');
-                return vLang.startsWith(langPrefix) ||
-                  (langPrefix === 'bn' && (v.name.toLowerCase().includes('bengali') || v.name.toLowerCase().includes('bangla')));
-              });
-              if (matchingVoice) utt.voice = matchingVoice;
-              utt.onend = () => resolve(true);
-              utt.onerror = () => resolve(true);
-              window.speechSynthesis.speak(utt);
+              try {
+                window.speechSynthesis.cancel();
+                const utt = new SpeechSynthesisUtterance(item.welcomePrompt);
+                utt.lang = item.ttsLang;
+                utt.rate = 0.95;
+                const voices = window.speechSynthesis.getVoices();
+                const langPrefix = item.ttsLang.slice(0, 2).toLowerCase();
+                const matchingVoice = voices.find(v => {
+                  const vLang = v.lang.toLowerCase().replace('_', '-');
+                  return vLang.startsWith(langPrefix) ||
+                    (langPrefix === 'bn' && (v.name.toLowerCase().includes('bengali') || v.name.toLowerCase().includes('bangla')));
+                });
+                if (matchingVoice) utt.voice = matchingVoice;
+                utt.onend = () => resolve(true);
+                utt.onerror = () => resolve(true);
+                window.speechSynthesis.speak(utt);
+              } catch {
+                resolve(true);
+              }
             } else {
               resolve(true);
             }
@@ -494,10 +547,10 @@ export function Login({ onSessionStarted }: Props) {
       await new Promise((r) => setTimeout(r, 500));
 
       let i = 0;
-      while (!abortController.signal.aborted && !isCancelled) {
+      while (!abortController.signal.aborted && !isCancelled && !isMuted) {
         const item = KIOSK_LANGUAGES[i % KIOSK_LANGUAGES.length];
         const ok = await playPromptAsync(item);
-        if (!ok || abortController.signal.aborted || isCancelled) break;
+        if (!ok || abortController.signal.aborted || isCancelled || isMuted) break;
 
         setActiveSpeakingLang(null);
         await new Promise((r) => setTimeout(r, 1200));
@@ -512,7 +565,15 @@ export function Login({ onSessionStarted }: Props) {
       abortController.abort();
       stopWelcomeLoop();
     };
-  }, [step, stopWelcomeLoop]);
+  }, [step, isMuted, stopWelcomeLoop, registerAbortController, registerAudioElement]);
+
+  // Immediately stop all welcome audio if muted changes to true
+  useEffect(() => {
+    if (isMuted) {
+      stopWelcomeLoop();
+      stop();
+    }
+  }, [isMuted, stopWelcomeLoop, stop]);
 
   // Auto-reset active consent audio when playback finishes
   useEffect(() => {
@@ -530,6 +591,7 @@ export function Login({ onSessionStarted }: Props) {
       stop();
     }
   }, [step, stop]);
+
 
   const handleToggleConsentAudio = (key: ConsentKey, audioKey: TranslationKey) => {
     if (activeConsentAudio === key) {
@@ -568,37 +630,46 @@ export function Login({ onSessionStarted }: Props) {
 
   // ── Step Audio Announcer ──────────────────────────────────────────
   useEffect(() => {
+    // Immediately terminate any leftover audio from the previous step
+    stopWelcomeLoop();
+    stop();
+
+    if (step === 'WELCOME_LANGUAGE' || isMuted) return;
+
     const speakStep = () => {
       switch (step) {
         case 'CONSENT':
-          speak('consent_intro');
+          speak('consent_intro', undefined, 1);
           break;
         case 'LANDING':
-          speak('welcome');
+          speak('welcome', undefined, 1);
           break;
         case 'ABHA_IDENTIFY':
-          speak('enter_abha');
+          speak('enter_abha', undefined, 1);
           break;
         case 'ABHA_OTP':
         case 'MOBILE_OTP_VERIFY':
-          speak('enter_otp');
+          speak('enter_otp', undefined, 1);
           break;
         case 'PHONE':
-          speak('enter_mobile');
+          speak('enter_mobile', undefined, 1);
           break;
         case 'REGISTER':
           if (abhaSourceProfile) {
-            speak('register_verify_abha');
+            speak('register_verify_abha', undefined, 1);
           } else {
-            speak('register_manual');
+            speak('register_manual', undefined, 1);
           }
           break;
       }
     };
     // Slight delay so DOM renders first before speaking
-    const t = setTimeout(speakStep, 300);
-    return () => clearTimeout(t);
-  }, [step, abhaSourceProfile, speak]);
+    const t = setTimeout(speakStep, 350);
+    return () => {
+      clearTimeout(t);
+      stop();
+    };
+  }, [step, isMuted, abhaSourceProfile, speak, stop, stopWelcomeLoop]);
 
   // ── Load doctors + departments ────────────────────────────────────
   useEffect(() => {
@@ -1060,34 +1131,37 @@ export function Login({ onSessionStarted }: Props) {
                   {/* Voice Announcement Status Banner */}
                   <div className="mb-2.5 p-2 rounded-xl bg-gradient-to-r from-blue-50/80 to-indigo-50/80 border border-blue-100 flex items-center justify-between">
                     <div className="flex items-center gap-2 min-w-0">
-                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${activeSpeakingLang ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'}`}>
-                        <Volume2 className={`w-3.5 h-3.5 ${activeSpeakingLang ? 'animate-pulse' : ''}`} />
+                      <div className={`w-7 h-7 rounded-lg flex items-center justify-center shrink-0 ${isMuted ? 'bg-amber-100 text-amber-600' : activeSpeakingLang ? 'bg-blue-600 text-white shadow-xs' : 'bg-slate-200 text-slate-500'}`}>
+                        {isMuted ? <VolumeX className="w-3.5 h-3.5 text-amber-600" /> : <Volume2 className={`w-3.5 h-3.5 ${activeSpeakingLang ? 'animate-pulse' : ''}`} />}
                       </div>
                       <div className="min-w-0">
                         <p className="text-[10px] font-bold text-slate-800 leading-tight truncate">
-                          {activeSpeakingLang === 'en' && 'English Audio Announcement'}
-                          {activeSpeakingLang === 'hi' && 'हिन्दी ऑडियो घोषणा जारी'}
-                          {activeSpeakingLang === 'bn' && 'বাংলা অডিও নির্দেশিকা চলছে'}
-                          {!activeSpeakingLang && 'Kiosk Audio Guide Active'}
+                          {isMuted && 'Audio Guide Muted (Unmute in top bar)'}
+                          {!isMuted && activeSpeakingLang === 'en' && 'English Audio Announcement'}
+                          {!isMuted && activeSpeakingLang === 'hi' && 'हिन्दी ऑडियो घोषणा जारी'}
+                          {!isMuted && activeSpeakingLang === 'bn' && 'বাংলা অডিও নির্দেশিকা চলছে'}
+                          {!isMuted && !activeSpeakingLang && 'Kiosk Audio Guide Active'}
                         </p>
                         <p className="text-[9px] text-slate-500 truncate">
-                          Dictating in 3 languages · Loop auto-rotates
+                          {isMuted ? 'Audio prompts are turned off' : 'Dictating in 3 languages · Loop auto-rotates'}
                         </p>
                       </div>
                     </div>
 
                     <button
                       type="button"
+                      disabled={isMuted}
                       onClick={() => {
+                        if (isMuted) return;
                         if (activeSpeakingLang) {
                           stopWelcomeLoop();
                         } else {
                           playSingleWelcome(KIOSK_LANGUAGES[0]);
                         }
                       }}
-                      className="px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:text-blue-700 bg-white/90 border border-slate-200/80 rounded-md shrink-0 shadow-2xs hover:bg-blue-50 transition-colors"
+                      className="px-2 py-0.5 text-[10px] font-semibold text-slate-600 hover:text-blue-700 bg-white/90 border border-slate-200/80 rounded-md shrink-0 shadow-2xs hover:bg-blue-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      {activeSpeakingLang ? 'Pause Audio' : 'Play Audio'}
+                      {isMuted ? 'Muted' : activeSpeakingLang ? 'Pause Audio' : 'Play Audio'}
                     </button>
                   </div>
 
@@ -1562,7 +1636,7 @@ export function Login({ onSessionStarted }: Props) {
                     type="text"
                     value={abhaNumber}
                     onChange={(e) => { setAbhaNumber(formatAbhaNumber(e.target.value)); }}
-                    onFocus={() => speak('enter_abha')}
+                    onFocus={() => stop()}
                     onKeyDown={e => e.key === 'Enter' && handleAbhaInit()}
                     placeholder={t('abha.placeholder')}
                     autoFocus
@@ -1631,7 +1705,7 @@ export function Login({ onSessionStarted }: Props) {
                 </div>
 
                 <div className="mb-6">
-                  <OtpInput length={6} value={otp} onChange={setOtp} onFocus={() => speak('enter_otp')} hasError={otpHasError} />
+                  <OtpInput length={6} value={otp} onChange={setOtp} onFocus={() => stop()} hasError={otpHasError} />
                   {otpHasError && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 mt-4 text-red-500 bg-red-50 px-4 py-3 rounded-lg text-sm font-medium">
                       <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1774,7 +1848,7 @@ export function Login({ onSessionStarted }: Props) {
                     type="tel"
                     value={phone}
                     onChange={(e) => setPhone(e.target.value.replace(/\D/g, '').slice(0, 10))}
-                    onFocus={() => speak('enter_mobile')}
+                    onFocus={() => stop()}
                     onKeyDown={e => e.key === 'Enter' && handleMobileInit()}
                     placeholder={t('phone.placeholder')}
                     autoFocus
@@ -1833,7 +1907,7 @@ export function Login({ onSessionStarted }: Props) {
                 </div>
 
                 <div className="mb-6">
-                  <OtpInput length={6} value={mobileOtp} onChange={setMobileOtp} onFocus={() => speak('enter_otp')} hasError={mobileOtpHasError} />
+                  <OtpInput length={6} value={mobileOtp} onChange={setMobileOtp} onFocus={() => stop()} hasError={mobileOtpHasError} />
                   {mobileOtpHasError && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 mt-4 text-red-500 bg-red-50 px-4 py-3 rounded-lg text-sm font-medium">
                       <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1978,7 +2052,7 @@ export function Login({ onSessionStarted }: Props) {
                     value={regData.full_name || ''}
                     placeholder={t('form.name_placeholder')}
                     onChange={e => setRegData({...regData, full_name: e.target.value})}
-                    onFocus={() => speak('enter_name')}
+                    onFocus={() => stop()}
                     disabled={!!abhaSourceProfile}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 focus:border-blue-500 outline-none transition-colors"
                   />
@@ -1995,7 +2069,7 @@ export function Login({ onSessionStarted }: Props) {
                       value={regData.age || ''}
                       placeholder={t('form.age_placeholder')}
                       onChange={e => setRegData({...regData, age: parseInt(e.target.value) || undefined})}
-                      onFocus={() => speak('enter_age')}
+                      onFocus={() => stop()}
                       disabled={!!abhaSourceProfile}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 focus:border-blue-500 outline-none transition-colors"
                     />
@@ -2008,7 +2082,7 @@ export function Login({ onSessionStarted }: Props) {
                     <select
                       value={regData.gender || ''}
                       onChange={e => setRegData({...regData, gender: e.target.value})}
-                      onFocus={() => speak('select_gender')}
+                      onFocus={() => stop()}
                       disabled={!!abhaSourceProfile}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 focus:border-blue-500 outline-none transition-colors"
                     >
@@ -2030,7 +2104,7 @@ export function Login({ onSessionStarted }: Props) {
                       type="number"
                       value={regData.weight || ''}
                       placeholder={t('form.weight_placeholder')}
-                      onFocus={() => speak('enter_weight')}
+                      onFocus={() => stop()}
                       onChange={e => setRegData({ ...regData, weight: parseFloat(e.target.value) || undefined })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 focus:border-blue-500 outline-none transition-colors"
                     />
@@ -2044,7 +2118,7 @@ export function Login({ onSessionStarted }: Props) {
                       type="text"
                       value={regData.height || ''}
                       placeholder={t('form.height_placeholder')}
-                      onFocus={() => speak('enter_height')}
+                      onFocus={() => stop()}
                       onChange={e => setRegData({ ...regData, height: e.target.value })}
                       className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 focus:border-blue-500 outline-none transition-colors"
                     />
@@ -2089,7 +2163,7 @@ export function Login({ onSessionStarted }: Props) {
                     type="text"
                     value={regData.address || ''}
                     placeholder={t('form.address_placeholder')}
-                    onFocus={() => speak('enter_address')}
+                    onFocus={() => stop()}
                     onChange={e => setRegData({ ...regData, address: e.target.value })}
                     className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 focus:border-blue-500 outline-none transition-colors"
                   />
