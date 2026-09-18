@@ -6,6 +6,7 @@ import { API_BASE } from '../config';
 import { FileDown, Clock, MapPin, User, Sparkles, Activity, Loader2, Building2, BookOpen, X, ChevronRight } from 'lucide-react';
 import { useTranslation } from '../i18n/LanguageContext';
 import { MEDICAL_GLOSSARY } from '../data/medicalGlossary';
+import logoPNG from '../assets/logoPNG.png';
 
 interface QueueSession {
   token_id: string;
@@ -91,22 +92,49 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateToTab }) => {
   );
 
   return (
-    <div className="p-5 space-y-6 max-w-md mx-auto">
+    <div className="p-5 space-y-5 max-w-md mx-auto">
+      {/* SwasthyaSync Top Brand Bar */}
+      <div className="flex items-center justify-between pb-3.5 border-b border-slate-200/70">
+        <div className="flex items-center gap-2.5">
+          <div className="w-9 h-9 rounded-2xl bg-white border border-slate-200/80 p-1 flex items-center justify-center shadow-xs">
+            <img src={logoPNG} alt="SwasthyaSync" className="w-full h-full object-contain" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-sm font-black tracking-tight text-slate-900">
+                Swasthya<span className="text-blue-600">Sync</span>
+              </span>
+              <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200/70">
+                Portal
+              </span>
+            </div>
+            <p className="text-[10px] text-slate-400 font-semibold tracking-tight">AI OPD & Health Records</p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-1.5">
+          <motion.button
+            whileTap={{ scale: 0.95 }}
+            whileHover={{ translateY: -1 }}
+            onClick={() => setShowGlossary(true)}
+            className="flex items-center gap-1 px-3 py-1.5 bg-white text-blue-700 rounded-full text-xs font-bold border border-blue-200/80 shadow-2xs hover:bg-blue-50 transition-colors"
+          >
+            <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+            <span>Glossary</span>
+          </motion.button>
+        </div>
+      </div>
+
       {/* Greeting Header */}
-      <div className="pt-2 flex items-center justify-between">
+      <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">{getGreeting()} 👋</h1>
           <p className="text-xs font-semibold text-slate-500 mt-0.5 tracking-wide">{maskPhone(phone)}</p>
         </div>
-        <motion.button
-          whileTap={{ scale: 0.95 }}
-          whileHover={{ translateY: -1 }}
-          onClick={() => setShowGlossary(true)}
-          className="flex items-center gap-1.5 px-3.5 py-1.5 bg-white text-blue-700 rounded-full text-xs font-bold border border-blue-200/80 shadow-[0_2px_8px_rgba(37,99,235,0.08)] hover:bg-blue-50 transition-colors"
-        >
-          <BookOpen className="w-3.5 h-3.5 text-blue-600" />
-          <span>Glossary</span>
-        </motion.button>
+        <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200 shadow-2xs">
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+          <span>Live Sync</span>
+        </div>
       </div>
 
       {/* Live Queue Hero Card */}

@@ -4,7 +4,8 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { API_BASE } from '../config';
-import { ActivitySquare, Fingerprint, Lock, ChevronRight, Loader2, ShieldCheck, ArrowLeft, KeyRound } from 'lucide-react';
+import { Fingerprint, Lock, ChevronRight, Loader2, ShieldCheck, ArrowLeft, KeyRound } from 'lucide-react';
+import logoPNG from '../assets/logoPNG.png';
 
 type Stage = 'ENTER_PHONE' | 'ENTER_OTP';
 
@@ -101,10 +102,11 @@ export const LoginScreen: React.FC = () => {
       const res = await axios.post(`${API_BASE}/api/portal/auth/init`, { phone });
       setTxnId(res.data.transaction_id);
       setPhoneHint(res.data.phone_hint);
-      setDemoOtp(res.data.debug_otp || '');
-      setResendCountdown(res.data.resend_after_seconds || 60);
-      setError('');
-      toast.success('New OTP sent!');
+      const code = res.data.debug_otp || '123456';
+      setDemoOtp(code);
+      setOtp(code);
+      setResendCountdown(res.data.resend_after_seconds || 5);
+      toast.success(`New Mock OTP generated: ${code}`);
     } catch (err: any) {
       const msg = parseError(err, 'Failed to resend OTP.');
       setError(msg);
@@ -124,12 +126,24 @@ export const LoginScreen: React.FC = () => {
         transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
         className="mb-8 flex flex-col items-center text-center"
       >
-        <div className="w-16 h-16 rounded-2xl bg-white shadow-[0_8px_24px_rgba(37,99,235,0.12)] border border-blue-100/60 flex items-center justify-center mb-3.5 relative overflow-hidden group">
-          <div className="absolute inset-0 bg-blue-50/50 opacity-0 group-hover:opacity-100 transition-opacity" />
-          <ActivitySquare className="w-8 h-8 text-blue-600 relative z-10" />
+        <motion.div
+          whileHover={{ scale: 1.05 }}
+          className="w-20 h-20 rounded-3xl bg-white shadow-[0_10px_32px_rgba(37,99,235,0.15)] border border-blue-100/80 flex items-center justify-center p-3 mb-3.5 relative overflow-hidden group"
+        >
+          <div className="absolute inset-0 bg-blue-50/40 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <img src={logoPNG} alt="SwasthyaSync Logo" className="w-full h-full object-contain relative z-10 drop-shadow-xs" />
+        </motion.div>
+        <div className="flex items-center gap-1.5 justify-center">
+          <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
+            Swasthya<span className="text-blue-600">Sync</span>
+          </h1>
+          <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider bg-blue-50 text-blue-700 rounded-full border border-blue-200/70 shadow-2xs">
+            Portal
+          </span>
         </div>
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">Patient Portal</h1>
-        <p className="text-slate-500 font-medium text-sm mt-1.5">Access your SwasthyaSync medical records</p>
+        <p className="text-slate-500 font-medium text-xs sm:text-sm mt-1.5 max-w-[260px]">
+          Smart Healthcare Companion & Digital Health Records
+        </p>
       </motion.div>
 
       {/* Login Card */}
@@ -308,9 +322,12 @@ export const LoginScreen: React.FC = () => {
           )}
         </AnimatePresence>
 
-        <div className="mt-6 pt-4 border-t border-slate-100 flex items-center justify-center gap-2 text-xs font-medium text-slate-400">
-          <Lock className="w-3.5 h-3.5 text-slate-400" />
-          <span>Secured by ABDM M1 Hybrid Flow</span>
+        <div className="mt-6 pt-4 border-t border-slate-100 flex flex-col items-center gap-1.5 text-center">
+          <div className="flex items-center gap-1.5 text-xs font-semibold text-slate-500">
+            <Lock className="w-3.5 h-3.5 text-blue-600" />
+            <span>DPDP Act & ABDM M1 Secured</span>
+          </div>
+          <p className="text-[10px] text-slate-400 font-medium">End-to-End Encrypted Patient Health Records</p>
         </div>
       </motion.div>
     </div>

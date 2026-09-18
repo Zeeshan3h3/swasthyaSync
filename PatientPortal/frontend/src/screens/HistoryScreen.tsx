@@ -4,8 +4,9 @@ import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
 import { API_BASE } from '../config';
-import { FileText, Calendar, User, Download, Star, ChevronDown, ChevronUp, Loader2, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { Calendar, User, Download, Star, ChevronDown, ChevronUp, Loader2, Search, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { useTranslation } from '../i18n/LanguageContext';
+import logoPNG from '../assets/logoPNG.png';
 
 interface Consultation {
   session_id: string;
@@ -109,9 +110,14 @@ export const HistoryScreen: React.FC = () => {
   return (
     <div className="p-5 space-y-4 max-w-md mx-auto">
       {/* Header */}
-      <div className="pt-2">
-        <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">{t.history.title}</h1>
-        <p className="text-xs font-semibold text-slate-500 mt-0.5">{history.length} record(s) on file</p>
+      <div className="pt-2 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">{t.history.title}</h1>
+          <p className="text-xs font-semibold text-slate-500 mt-0.5">{history.length} record(s) on file</p>
+        </div>
+        <div className="w-9 h-9 rounded-2xl bg-white border border-slate-200/80 p-1 flex items-center justify-center shadow-xs">
+          <img src={logoPNG} alt="SwasthyaSync" className="w-full h-full object-contain" />
+        </div>
       </div>
 
       {/* Search Bar */}
@@ -128,8 +134,8 @@ export const HistoryScreen: React.FC = () => {
 
       {Object.keys(grouped).length === 0 ? (
         <div className="bg-white p-8 rounded-3xl border border-slate-200/80 text-center flex flex-col items-center shadow-xs">
-          <div className="w-16 h-16 bg-slate-50 border border-slate-100 text-slate-400 rounded-3xl flex items-center justify-center mb-3 shadow-xs">
-            <FileText className="w-8 h-8 text-slate-400" />
+          <div className="w-16 h-16 bg-slate-50 border border-slate-100 rounded-3xl flex items-center justify-center p-3.5 mb-3 shadow-xs">
+            <img src={logoPNG} alt="SwasthyaSync" className="w-full h-full object-contain opacity-40 grayscale" />
           </div>
           <h3 className="text-slate-900 font-bold mb-1">{t.history.noRecords}</h3>
           <p className="text-slate-500 text-xs max-w-[240px] leading-relaxed">{t.history.noRecordsDesc}</p>

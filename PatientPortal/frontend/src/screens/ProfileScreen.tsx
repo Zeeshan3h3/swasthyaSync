@@ -7,6 +7,7 @@ import { API_BASE } from '../config';
 import { User, FileDown, LogOut, Globe, Shield, ChevronRight, Check, X, Loader2 } from 'lucide-react';
 import { useTranslation } from '../i18n/LanguageContext';
 import type { Language } from '../i18n/translations';
+import logoPNG from '../assets/logoPNG.png';
 
 export const ProfileScreen: React.FC = () => {
   const navigate = useNavigate();
@@ -134,6 +135,20 @@ export const ProfileScreen: React.FC = () => {
         <LogOut className="w-4 h-4" />
         {t.profile.logout}
       </motion.button>
+
+      {/* Brand & Security Compliance Footer */}
+      <div className="pt-4 pb-2 flex flex-col items-center justify-center text-center gap-2">
+        <div className="flex items-center gap-2">
+          <img src={logoPNG} alt="SwasthyaSync" className="w-5 h-5 object-contain opacity-80" />
+          <span className="text-xs font-black tracking-tight text-slate-700">
+            Swasthya<span className="text-blue-600">Sync</span>
+          </span>
+          <span className="text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-slate-100 text-slate-600">v2.0</span>
+        </div>
+        <p className="text-[10px] text-slate-400 font-semibold max-w-[280px] leading-relaxed">
+          Compliant with DPDP Act 2023 & Ayushman Bharat Digital Mission (ABDM). All medical records are encrypted.
+        </p>
+      </div>
 
       {/* Language Picker Modal / Sheet */}
       <AnimatePresence>

@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import axios from 'axios';
 import { motion } from 'framer-motion';
 import { API_BASE } from '../config';
-import { Building2, Heart, Stethoscope, Loader2, Users, Activity, PhoneCall } from 'lucide-react';
+import { Heart, Stethoscope, Loader2, Users, Activity, PhoneCall } from 'lucide-react';
 import { useTranslation } from '../i18n/LanguageContext';
+import logoPNG from '../assets/logoPNG.png';
 
 interface Department {
   dept_id: number;
@@ -67,11 +68,16 @@ export const HospitalInfoScreen: React.FC = () => {
         <div className="absolute top-0 right-0 w-36 h-36 bg-white/10 rounded-full blur-2xl pointer-events-none" />
         <div className="relative z-10">
           <div className="flex items-center gap-3.5 mb-4">
-            <div className="w-12 h-12 bg-white/15 backdrop-blur-md rounded-2xl flex items-center justify-center border border-white/20 shadow-xs">
-              <Building2 className="w-6 h-6 text-white" />
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center p-2 border border-white/30 shadow-sm shrink-0">
+              <img src={logoPNG} alt="SwasthyaSync Hospital" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="text-lg font-extrabold tracking-tight">{info.hospital_name || t.hospital.subtitle}</h1>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                <h1 className="text-lg font-extrabold tracking-tight">{info.hospital_name || t.hospital.subtitle}</h1>
+                <span className="px-1.5 py-0.5 text-[9px] font-extrabold bg-white/20 text-white rounded-md uppercase backdrop-blur-sm border border-white/20">
+                  SwasthyaSync
+                </span>
+              </div>
               <p className="text-blue-100 text-xs font-medium">{t.hospital.subtitle}</p>
             </div>
           </div>

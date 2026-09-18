@@ -3,8 +3,9 @@ import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import { API_BASE } from '../config';
-import { ChevronLeft, Send, Sparkles, Pill, Clock, Stethoscope, RotateCcw } from 'lucide-react';
+import { ChevronLeft, Send, Pill, Clock, Stethoscope, RotateCcw } from 'lucide-react';
 import { useTranslation } from '../i18n/LanguageContext';
+import logoPNG from '../assets/logoPNG.png';
 
 interface Message {
   id: string;
@@ -100,7 +101,11 @@ export const ChatScreen: React.FC = () => {
         navigate('/login');
         return;
       }
-      setMessages(prev => [...prev, { id: (Date.now() + 1).toString(), sender: 'ai', text: "I'm sorry, I encountered an error. Please try again." }]);
+      setMessages(prev => [...prev, {
+        id: (Date.now() + 1).toString(),
+        sender: 'ai',
+        text: 'I apologize, but I am currently having trouble connecting to the medical server. Please check your connection and try again.',
+      }]);
     } finally {
       setLoading(false);
     }
@@ -126,11 +131,14 @@ export const ChatScreen: React.FC = () => {
             <ChevronLeft className="w-5 h-5" />
           </motion.button>
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-blue-600 rounded-full flex items-center justify-center shadow-xs">
-              <Sparkles className="w-4 h-4 text-white" />
+            <div className="w-8 h-8 rounded-xl bg-white border border-slate-200/80 p-1 flex items-center justify-center shadow-xs">
+              <img src={logoPNG} alt="SwasthyaSync" className="w-full h-full object-contain" />
             </div>
             <div>
-              <h1 className="text-sm font-extrabold text-slate-900 leading-tight tracking-tight">{t.chat.title}</h1>
+              <h1 className="text-sm font-extrabold text-slate-900 leading-tight tracking-tight flex items-center gap-1.5">
+                SwasthyaSync AI
+                <span className="px-1.5 py-0.2 text-[9px] font-extrabold bg-blue-50 text-blue-700 rounded border border-blue-200/60 uppercase">Assistant</span>
+              </h1>
               <p className="text-[10px] font-bold text-emerald-600 flex items-center gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
                 {t.chat.subtitle}
@@ -161,8 +169,13 @@ export const ChatScreen: React.FC = () => {
               initial={{ opacity: 0, y: 8, scale: 0.98 }}
               animate={{ opacity: 1, y: 0, scale: 1 }}
               transition={{ duration: 0.2, ease: [0.16, 1, 0.3, 1] }}
-              className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+              className={`flex items-end gap-2 ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
+              {msg.sender === 'ai' && (
+                <div className="w-7 h-7 rounded-xl bg-white border border-slate-200/80 p-1 flex items-center justify-center shrink-0 mb-0.5 shadow-2xs">
+                  <img src={logoPNG} alt="AI" className="w-full h-full object-contain" />
+                </div>
+              )}
               <div className={`max-w-[85%] rounded-3xl px-4.5 py-3 text-xs sm:text-sm whitespace-pre-wrap leading-relaxed shadow-xs ${
                 msg.sender === 'user'
                   ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-tr-md shadow-blue-600/15'
@@ -204,8 +217,11 @@ export const ChatScreen: React.FC = () => {
           <motion.div
             initial={{ opacity: 0, y: 6 }}
             animate={{ opacity: 1, y: 0 }}
-            className="flex justify-start"
+            className="flex items-end gap-2 justify-start"
           >
+            <div className="w-7 h-7 rounded-xl bg-white border border-slate-200/80 p-1 flex items-center justify-center shrink-0 mb-0.5 shadow-2xs">
+              <img src={logoPNG} alt="AI" className="w-full h-full object-contain" />
+            </div>
             <div className="bg-white border border-slate-200/80 rounded-3xl rounded-tl-md px-4 py-3 shadow-xs flex items-center gap-2">
               <div className="flex items-center gap-1">
                 <span className="w-2 h-2 rounded-full bg-blue-600 animate-bounce" style={{ animationDelay: '0ms' }} />
