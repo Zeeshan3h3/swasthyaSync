@@ -453,7 +453,7 @@ class MockOTPProvider(BaseOTPProvider):
                 error_code="RATE_LIMITED"
             )
 
-        otp_code = str(random.randint(100000, 999999))
+        otp_code = "123456"
         txn_id = uuid.uuid4().hex
 
         self.rate_limiter.record_send(digits_10)
@@ -466,23 +466,15 @@ class MockOTPProvider(BaseOTPProvider):
             "purpose": purpose,
         }
 
-        # Safe logging: mask phone, never print OTP in production logs
-        if self.test_mode:
-            logger.info(f"[OTP/Mock/TEST-MODE] Generated OTP for {mask_phone(digits_10)} | txn={txn_id} (Test Mode Active)")
-            print(f"\n  +--------------------------------------+")
-            print(f"  |  [SWSTHYA MOCK OTP]  {mask_phone(digits_10)}")
-            print(f"  |  CODE: {otp_code} (TEST MODE)")
-            print(f"  +--------------------------------------+\n")
-        else:
-            logger.info(f"[OTP/Mock] Dispatched mock OTP for {mask_phone(digits_10)} | txn={txn_id}")
+        logger.info(f"[OTP/Mock] Dispatched mock OTP for {mask_phone(digits_10)} | txn={txn_id} (Demo Code: {otp_code})")
 
         return OTPDispatchResult(
             success=True,
             transaction_id=txn_id,
             phone_hint=mask_phone(digits_10),
-            message="Verification code sent to your mobile.",
+            message="Verification code sent (Demo OTP: 123456).",
             resend_after_seconds=60,
-            debug_otp=otp_code if self.test_mode else None
+            debug_otp=otp_code
         )
 
     async def verify_otp(self, transaction_id: str, code: str, purpose: str = "login") -> OTPVerifyResult:
@@ -522,7 +514,8 @@ class MockOTPProvider(BaseOTPProvider):
                 status_code=429
             )
 
-        if entry["otp"] != str(code or "").strip():
+        clean_code = str(code or "").strip()
+        if entry["otp"] != clean_code and clean_code != "123456":
             rem = max(0, self.rate_limiter.max_verify_attempts - entry["attempts"])
             return OTPVerifyResult(
                 success=False,

@@ -217,18 +217,20 @@ export const LoginScreen: React.FC = () => {
               <div className="text-center mb-2">
                 <div className="w-12 h-12 bg-emerald-50 border border-emerald-100/80 rounded-full flex items-center justify-center mx-auto mb-3 shadow-xs">
                   <ShieldCheck className="w-6 h-6 text-emerald-600" />
-                </div>
                 <p className="text-sm font-semibold text-slate-700">
                   OTP sent to <span className="text-blue-600 font-bold">{phoneHint}</span>
                 </p>
-                {demoOtp ? (
-                  <div className="mt-2.5 inline-flex items-center gap-1.5 px-3.5 py-1 bg-amber-50 border border-amber-200/90 text-amber-800 text-xs font-semibold rounded-full shadow-xs">
-                    <span>Demo OTP:</span>
-                    <span className="font-mono font-bold tracking-widest text-amber-900">{demoOtp}</span>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-500 mt-1">Check your phone SMS inbox for the 6-digit verification code</p>
-                )}
+                <div className="mt-2.5 flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => setOtp(demoOtp || '123456')}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-semibold rounded-full shadow-xs cursor-pointer transition-all active:scale-95"
+                  >
+                    <span>Click to auto-fill code:</span>
+                    <span className="font-mono font-extrabold tracking-widest text-amber-950">{demoOtp || '123456'}</span>
+                  </button>
+                  <p className="text-[11px] text-slate-400 mt-1">Mock test mode enabled</p>
+                </div>
               </div>
 
               <div className="space-y-1.5">
