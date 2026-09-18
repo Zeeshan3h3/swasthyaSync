@@ -63,8 +63,8 @@ export const DemoSwitcher: React.FC = () => {
     {
       title: "Patient Mobile Portal",
       description: "Scan QR code on your phone to access live AI chat and consultation history.",
-      icon: <QRCode value="https://portal.swasthyasync.app" size={40} className="rounded-md" />,
-      path: "https://portal.swasthyasync.app",
+      icon: <QRCode value="https://swasthyasync-patient-portal.vercel.app/login" size={40} className="rounded-md" />,
+      path: "https://swasthyasync-patient-portal.vercel.app/login",
       gradient: "from-orange-500 to-amber-500",
       borderColor: "border-orange-200",
       iconBg: "bg-orange-50",
@@ -349,10 +349,13 @@ export const DemoSwitcher: React.FC = () => {
                       { label: 'Triage Queue', href: '/dashboard/triage' },
                       { label: 'Doctor Portal', href: '/doctor' },
                       { label: 'Admin Panel', href: '/admin' },
+                      { label: 'Patient Mobile Portal', href: 'https://swasthyasync-patient-portal.vercel.app/login', isExternal: true },
                     ].map(link => (
                       <a
                         key={link.label}
                         href={link.href}
+                        target={link.isExternal ? '_blank' : undefined}
+                        rel={link.isExternal ? 'noopener noreferrer' : undefined}
                         className="group flex items-center gap-2 text-slate-400 hover:text-white transition-colors duration-200"
                       >
                         <span className="w-1 h-1 rounded-full bg-slate-600 group-hover:bg-blue-500 transition-colors" />
