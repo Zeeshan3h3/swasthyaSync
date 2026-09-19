@@ -19,17 +19,17 @@ export function getApiBaseUrl(): string {
     const hostname = window.location.hostname || 'localhost';
     const protocol = window.location.protocol;
 
-    // If deployed on Vercel or Render or any cloud host
-    if (hostname.includes('vercel.app') || hostname.includes('onrender.com')) {
-      return FALLBACK_PROD_BACKEND;
-    }
-
     // Local development
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return `${protocol}//localhost:8000`;
     }
 
-    // LAN / local network testing (e.g. phone accessing laptop)
+    // Any production or preview deployment (Vercel, Railway, Render, custom domains)
+    if (import.meta.env.PROD || hostname.includes('vercel.app') || hostname.includes('railway.app') || hostname.includes('onrender.com')) {
+      return FALLBACK_PROD_BACKEND;
+    }
+
+    // LAN / local network testing (e.g. phone accessing laptop on 192.168.x.x)
     return `${protocol}//${hostname}:8000`;
   }
 
@@ -53,15 +53,15 @@ export function getWsUrl(): string {
     const hostname = window.location.hostname || 'localhost';
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
 
-    // Cloud deployment (Vercel, Render, etc.)
-    if (hostname.includes('vercel.app') || hostname.includes('onrender.com')) {
-      const prodWs = FALLBACK_PROD_BACKEND.replace('https://', 'wss://').replace('http://', 'ws://');
-      return `${prodWs}/ws/session`;
-    }
-
     // Local development
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
       return 'ws://localhost:8000/ws/session';
+    }
+
+    // Any production or preview deployment (Vercel, Railway, Render, custom domains)
+    if (import.meta.env.PROD || hostname.includes('vercel.app') || hostname.includes('railway.app') || hostname.includes('onrender.com')) {
+      const prodWs = FALLBACK_PROD_BACKEND.replace('https://', 'wss://').replace('http://', 'ws://');
+      return `${prodWs}/ws/session`;
     }
 
     // Local network testing
