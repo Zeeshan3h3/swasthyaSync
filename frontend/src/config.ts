@@ -5,7 +5,7 @@
  * Works seamlessly on localhost, local network IPs (e.g. 103.x, 192.168.x), Vercel, and cloud deployments.
  */
 
-const FALLBACK_PROD_BACKEND = 'https://swasthyasync-backend.onrender.com';
+const FALLBACK_PROD_BACKEND = 'https://swasthyasync-production.up.railway.app';
 
 export function getApiBaseUrl(): string {
   if (import.meta.env.VITE_API_URL) {
