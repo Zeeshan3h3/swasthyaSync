@@ -154,7 +154,7 @@ function KioskApp() {
   return (
     <AudioGuideProvider>
       <AudioRouteTerminator />
-      <Layout isConnected={isConnected} isKioskInterview={isInterview}>
+      <Layout isConnected={isConnected} isKioskInterview={isInterview} clinicMode={ui?.clinic_mode}>
         <RouteSynchronizer ui={ui} pendingSession={pendingSession} />
       
       <div className="relative w-full grow flex flex-col h-full overflow-hidden">
@@ -236,9 +236,17 @@ function KioskApp() {
                       Generating a clinical questionnaire tailored specifically to your complaint...
                     </p>
                   </div>
+                ) : !ui ? (
+                  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center h-full">
+                    <div className="w-16 h-16 border-4 border-blue-200 border-t-blue-600 rounded-full animate-spin mb-6" />
+                    <h2 className="text-xl font-semibold text-slate-800 mb-2">Connecting to Session...</h2>
+                    <p className="text-slate-500 max-w-sm">
+                      Please wait while your conversational interview is synchronized.
+                    </p>
+                  </div>
                 ) : (
                   <Screen3_ConversationalIntake
-                    ui={ui!}
+                    ui={ui}
                     orbState={orbState}
                     isProcessing={isProcessing}
                     onTap={(value: string) => sendInput('tap', value)}

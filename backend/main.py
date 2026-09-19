@@ -620,7 +620,8 @@ async def websocket_session(ws: WebSocket, session_id: str = Query(None)):
                     record_payload = {
                         "filled_state": dm.record.filled_state,
                         "document_extractions": [e.model_dump() for e in dm.record.document_extractions],
-                        "red_flags": [r.model_dump() for r in dm.record.red_flags]
+                        "red_flags": [r.model_dump() for r in dm.record.red_flags],
+                        "clinic_mode": getattr(dm.record, "clinic_mode", "allopathic"),
                     }
                     has_red_flags = len(dm.record.red_flags) > 0
                     await database.commit_fsm_checkpoint(
@@ -629,7 +630,7 @@ async def websocket_session(ws: WebSocket, session_id: str = Query(None)):
                         chief_complaint=str(dm.record.chief_complaint.value or "") if dm.record.chief_complaint else "",
                         interview_qa=dm.record.conversation_history,
                         priority_flag=has_red_flags,
-                        status="IN_PROGRESS"
+                        status="COMPLETED" if getattr(dm.fsm, "state", "") == "COMPLETE" else "IN_PROGRESS"
                     )
                 except Exception as e:
                     logger.error(f"🚨 Checkpoint failed for session {dm.record.session_id} - {e}")
