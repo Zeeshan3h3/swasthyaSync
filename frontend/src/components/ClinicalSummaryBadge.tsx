@@ -1,4 +1,4 @@
-import { Heart, User, Activity, AlertCircle, Sparkles, Flame, Wind, Droplets, ShieldCheck, CheckCircle2 } from 'lucide-react';
+import { Heart, User, Activity, AlertCircle, Flame, Wind, Droplets, CheckCircle2 } from 'lucide-react';
 import { useMemo } from 'react';
 
 interface Props {
@@ -18,14 +18,12 @@ const PREDICTOR_META: Record<string, { label: string; ayushLabel?: string; hindi
   // Physiological (Kriyatmaka)
   prakriti_appetite: { label: 'Hunger & Agni', ayushLabel: 'Agni & Kshudha Vega', hindi: 'अग्नि एवं क्षुधा वेग', domain: 'physiological', icon: '🔥', sopRef: 'CCRAS SOP 2.1' },
   prakriti_thirst: { label: 'Thirst Level', ayushLabel: 'Pipasa Pravritti', hindi: 'पिपासा प्रवृत्ति', domain: 'physiological', icon: '💧', sopRef: 'CCRAS SOP 2.2' },
-  prakriti_eating_speed: { label: 'Eating Pace', ayushLabel: 'Ahara Vega & Grahanam', hindi: 'आहार वेग', domain: 'physiological', icon: '⏱️', sopRef: 'CCRAS SOP 2.3' },
-  prakriti_bowel: { label: 'Bowel Habit', ayushLabel: 'Koshtha & Purisha Pravritti', hindi: 'कोष्ठ एवं पुरीष', domain: 'physiological', icon: '🌿', sopRef: 'CCRAS SOP 2.4' },
-  prakriti_sleep: { label: 'Sleep Depth', ayushLabel: 'Nidra & Swapna', hindi: 'निद्रा एवं स्वप्न', domain: 'physiological', icon: '🌙', sopRef: 'CCRAS SOP 2.5' },
-  prakriti_weather: { label: 'Thermal Tolerance', ayushLabel: 'Sheeta-Ushna Sahishnuta', hindi: 'शीत-उष्ण सहिष्णुता', domain: 'physiological', icon: '☀️', sopRef: 'CCRAS SOP 2.6' },
-  prakriti_perspiration: { label: 'Sweating Tendency', ayushLabel: 'Sweda Pravritti & Gandha', hindi: 'स्वेद प्रवृत्ति', domain: 'physiological', icon: '💦', sopRef: 'CCRAS SOP 2.7' },
-  
+  prakriti_bowel: { label: 'Bowel Habits (Koshtha)', ayushLabel: 'Koshtha Pariksha', hindi: 'कोष्ठ परीक्षा', domain: 'physiological', icon: '🩺', sopRef: 'CCRAS SOP 2.3' },
+  prakriti_sweat: { label: 'Perspiration (Sweda)', ayushLabel: 'Sweda Pravritti', hindi: 'स्वेद प्रवृत्ति', domain: 'physiological', icon: '💦', sopRef: 'CCRAS SOP 2.4' },
+  prakriti_sleep: { label: 'Sleep & Dreams (Nidra)', ayushLabel: 'Nidra & Swapna', hindi: 'निद्रा एवं स्वप्न', domain: 'physiological', icon: '🌙', sopRef: 'CCRAS SOP 2.5' },
+  prakriti_joints: { label: 'Joint Stability (Sandhi)', ayushLabel: 'Sandhi Bandhana', hindi: 'सन्धि बन्धन', domain: 'physiological', icon: '🦵', sopRef: 'CCRAS SOP 2.6' },
+
   // Psychological (Manasika)
-  prakriti_decisiveness: { label: 'Decision Consistency', ayushLabel: 'Anavasthita Atma / Nishchaya', hindi: 'अनवस्थित आत्मा / निश्चय', domain: 'psychological', icon: '🎯', sopRef: 'CCRAS SOP 3.1' },
   prakriti_memory: { label: 'Memory & Recall', ayushLabel: 'Smriti & Grahanashakti', hindi: 'स्मृति एवं ग्रहणशक्ति', domain: 'psychological', icon: '🧠', sopRef: 'CCRAS SOP 3.2' },
   prakriti_temperament: { label: 'Emotional Disposition', ayushLabel: 'Manasa Prakriti / Amarsha', hindi: 'मानस प्रकृति / अमर्ष', domain: 'psychological', icon: '⚖️', sopRef: 'CCRAS SOP 3.3' },
   
@@ -95,7 +93,7 @@ export function ClinicalSummaryBadge({ summary, clinicMode = 'allopathic', empty
 
     // Parse ALL dynamic line entries: "field_id: value"
     const lines = rawText.split('\n');
-    const collectedFields: Array<{ id: string; label: string; value: string; domain: string; icon: string; dosha: 'Vata' | 'Pitta' | 'Kapha' | null }> = [];
+    const collectedFields: Array<{ id: string; label: string; sopRef?: string; value: string; domain: string; icon: string; dosha: 'Vata' | 'Pitta' | 'Kapha' | null }> = [];
     
     let vataCount = 0;
     let pittaCount = 0;

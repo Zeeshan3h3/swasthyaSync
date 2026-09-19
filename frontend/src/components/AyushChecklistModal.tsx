@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Clock, ShieldCheck, Sparkles, Flame, Wind, Droplets, Search, Filter } from 'lucide-react';
+import { X, CheckCircle2, Clock, ShieldCheck, Sparkles, Search } from 'lucide-react';
 
 export interface AyushCheckItem {
   id: string;
@@ -330,7 +330,7 @@ export function AyushChecklistModal({
   onClose,
   summaryText = '',
   currentFieldId,
-  progressTotal = 25,
+  progressTotal: _progressTotal = 25,
   progressDone = 0,
 }: Props) {
   const [activeDomain, setActiveDomain] = useState<string>('all');
