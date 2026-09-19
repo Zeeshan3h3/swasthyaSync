@@ -8,8 +8,9 @@ import {
   Activity, Users, LayoutList, Stethoscope, Settings, List, AlertTriangle, X, Search, DownloadCloud, TrendingUp, ShieldAlert
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { getApiBaseUrl } from '../config';
 
-const API_BASE = 'http://localhost:8000/api/admin';
+const API_BASE = `${getApiBaseUrl()}/api/admin`;
 const ADMIN_EMAIL = 'mdzeeshan08886@gmail.com';
 const ADMIN_PASS = 'zeeshan';
 
@@ -98,7 +99,7 @@ export const AdminPanel: React.FC = () => {
       setLogs(Array.isArray(logRes) ? logRes : []);
 
       // Also fetch notifications
-      fetch(`http://localhost:8000/api/admin/notifications`)
+      fetch(`${API_BASE}/notifications`)
         .then(r => r.json())
         .then(d => setNotifications(d.notifications || []))
         .catch(() => {});
@@ -118,7 +119,7 @@ export const AdminPanel: React.FC = () => {
   }, [isAuthenticated]);
 
   const handleMarkNotificationRead = async (notif_id: string) => {
-    await fetch(`http://localhost:8000/api/admin/notifications/${notif_id}/read`, { method: 'PUT' });
+    await fetch(`${API_BASE}/notifications/${notif_id}/read`, { method: 'PUT' });
     setNotifications(prev => prev.filter(n => n.notif_id !== notif_id));
   };
 
