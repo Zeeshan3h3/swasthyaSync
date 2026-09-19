@@ -51,7 +51,10 @@ export function Screen3_ConversationalIntake({
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  const isAyush = ui?.clinic_mode === 'ayush' || (typeof ui?.section_summary === 'string' && ui?.section_summary.includes('prakriti_'));
+  const isAyush = Boolean(
+    (ui?.clinic_mode && ['ayush', 'ayur', 'panch'].some(m => String(ui.clinic_mode).toLowerCase().includes(m))) ||
+    (typeof ui?.section_summary === 'string' && ui?.section_summary.includes('prakriti_'))
+  );
 
   const collectedMap = useMemo(() => {
     return parseSummaryMap(ui?.section_summary);
@@ -135,43 +138,44 @@ export function Screen3_ConversationalIntake({
           LEFT PANEL: Structured Clinical Summary & Chat Transcript
       ───────────────────────────────────────────────────────────── */}
       <div className="w-full md:w-[320px] lg:w-[360px] bg-white border-b md:border-b-0 md:border-r border-slate-200 p-4 flex flex-col h-[38vh] md:h-full overflow-hidden shrink-0 shadow-xs z-10">
-        
-        {/* Tab Switcher: Transcript vs All Fields */}
-        <div className="flex items-center p-1 bg-slate-100/90 rounded-xl mb-2.5 shrink-0 border border-slate-200/80 shadow-2xs">
-          <button
-            type="button"
-            onClick={() => setLeftPanelTab('transcript')}
-            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              leftPanelTab === 'transcript'
-                ? 'bg-white text-slate-800 shadow-2xs border border-slate-200/60'
-                : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <span>💬</span>
-            <span>{t('interview.conversation')}</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setLeftPanelTab('all_fields')}
-            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-              leftPanelTab === 'all_fields'
-                ? isAyush ? 'bg-emerald-600 text-white shadow-2xs' : 'bg-blue-600 text-white shadow-2xs'
-                : isAyush ? 'text-emerald-700 hover:text-emerald-950 hover:bg-emerald-50' : 'text-slate-500 hover:text-slate-800'
-            }`}
-          >
-            <span>{isAyush ? '🌿' : '📋'}</span>
-            <span>{isAyush ? 'AYUSH Fields' : 'All Fields'}</span>
-            {collectedFieldCount > 0 && (
-              <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
-                leftPanelTab === 'all_fields' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-              }`}>
-                {collectedFieldCount}
-              </span>
-            )}
-          </button>
-        </div>
+        {/* Mode-specific Tab Switcher: Only render tabs if in AYUSH mode */}
+        {isAyush && (
+          <div className="flex items-center p-1 bg-slate-100/90 rounded-xl mb-2.5 shrink-0 border border-slate-200/80 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setLeftPanelTab('transcript')}
+              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                leftPanelTab === 'transcript'
+                  ? 'bg-white text-slate-800 shadow-2xs border border-slate-200/60'
+                  : 'text-slate-500 hover:text-slate-800'
+              }`}
+            >
+              <span>💬</span>
+              <span>{t('interview.conversation')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setLeftPanelTab('all_fields')}
+              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                leftPanelTab === 'all_fields'
+                  ? 'bg-emerald-600 text-white shadow-2xs'
+                  : 'text-emerald-700 hover:text-emerald-950 hover:bg-emerald-50'
+              }`}
+            >
+              <span>🌿</span>
+              <span>AYUSH 25 Checks</span>
+              {collectedFieldCount > 0 && (
+                <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                  leftPanelTab === 'all_fields' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+                }`}>
+                  {collectedFieldCount}/25
+                </span>
+              )}
+            </button>
+          </div>
+        )}
 
-        {leftPanelTab === 'transcript' ? (
+        {(!isAyush || leftPanelTab === 'transcript') ? (
           <>
             {/* Live Clinical Summary Badge Card */}
             <div className="mb-2 shrink-0">
@@ -399,28 +403,24 @@ export function Screen3_ConversationalIntake({
             </div>
           )}
 
-          {/* Option to see all 25 Ayurvedic checks */}
-          <div className="flex items-center justify-center gap-2 mt-0.5">
-            <button
-              type="button"
-              onClick={() => setChecklistModalOpen(true)}
-              className={`flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-bold transition-all shadow-xs cursor-pointer border ${
-                isAyush
-                  ? 'bg-gradient-to-r from-emerald-50 via-teal-50 to-amber-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-950 border-emerald-300 hover:scale-[1.02]'
-                  : 'bg-blue-50 hover:bg-blue-100 text-blue-900 border-blue-200 hover:scale-[1.02]'
-              }`}
-              title="Click to view all 25 Ayurvedic checks"
-            >
-              <span>{isAyush ? '🌿' : '📋'}</span>
-              <span>{isAyush ? 'View All 25 AYUSH Checks (CCRAS Protocol)' : 'View All 25 Checks'}</span>
-              <span className={`text-[10px] font-black px-2 py-0.2 rounded-full ${
-                isAyush ? 'bg-emerald-700 text-white' : 'bg-blue-600 text-white'
-              }`}>
-                {collectedFieldCount}/25
-              </span>
-              <span className="text-[10px] text-slate-400 font-bold">🔍</span>
-            </button>
-          </div>
+          {/* Option to see all 25 Ayurvedic checks (ONLY in AYUSH MODE) */}
+          {isAyush && (
+            <div className="flex items-center justify-center gap-2 mt-0.5">
+              <button
+                type="button"
+                onClick={() => setChecklistModalOpen(true)}
+                className="flex items-center gap-2 px-3.5 py-1 rounded-full text-xs font-bold transition-all shadow-xs cursor-pointer border bg-gradient-to-r from-emerald-50 via-teal-50 to-amber-50 hover:from-emerald-100 hover:to-teal-100 text-emerald-950 border-emerald-300 hover:scale-[1.02]"
+                title="Click to view all 25 Ayurvedic checks"
+              >
+                <span>🌿</span>
+                <span>View All 25 AYUSH Checks (CCRAS Protocol)</span>
+                <span className="text-[10px] font-black px-2 py-0.2 rounded-full bg-emerald-700 text-white">
+                  {collectedFieldCount}/25
+                </span>
+                <span className="text-[10px] text-slate-400 font-bold">🔍</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Center Zone: Orb, Prompt & Accessible Emoji Options (Scrollable internally if needed) */}
@@ -634,15 +634,17 @@ export function Screen3_ConversationalIntake({
         </div>
       </div>
 
-      {/* Full 25-Check AYUSH & Clinical Inspector Modal */}
-      <AyushChecklistModal
-        isOpen={checklistModalOpen}
-        onClose={() => setChecklistModalOpen(false)}
-        summaryText={ui.section_summary}
-        currentFieldId={ui.current_field_id}
-        progressTotal={25}
-        progressDone={collectedFieldCount}
-      />
+      {/* Full 25-Check AYUSH & Clinical Inspector Modal (ONLY in AYUSH MODE) */}
+      {isAyush && (
+        <AyushChecklistModal
+          isOpen={checklistModalOpen}
+          onClose={() => setChecklistModalOpen(false)}
+          summaryText={ui.section_summary}
+          currentFieldId={ui.current_field_id}
+          progressTotal={25}
+          progressDone={collectedFieldCount}
+        />
+      )}
     </motion.div>
   );
 }
