@@ -66,15 +66,15 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, onN
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, y: -20 }}
-      className="flex flex-col flex-1 p-6 sm:p-10 lg:p-12 h-full max-w-5xl mx-auto w-full"
+      className="flex flex-col flex-1 p-3.5 sm:p-10 lg:p-12 h-full max-w-5xl mx-auto w-full"
     >
       {extractions.length === 0 ? (
         <div className="flex flex-col items-center justify-center flex-1 text-center">
           <div className="bg-slate-100 p-6 rounded-full mb-6">
             <FileCheck className="w-16 h-16 text-slate-400" />
           </div>
-          <h2 className="text-3xl font-extrabold text-slate-900 mb-4">{t('verify.no_documents_uploaded')}</h2>
-          <p className="text-slate-500 text-lg mb-8 max-w-md">
+          <h2 className="text-2xl sm:text-3xl font-extrabold text-slate-900 mb-4">{t('verify.no_documents_uploaded')}</h2>
+          <p className="text-slate-500 text-sm sm:text-lg mb-8 max-w-md">
             {t('verify.no_docs_desc')}
           </p>
           <LiquidButton
@@ -82,20 +82,20 @@ export function Screen6_DigitizationVerification({ patientRecord, sessionId, onN
               stop();
               onNext();
             }}
-            className="bg-emerald-600 hover:bg-emerald-500 text-white px-10 py-4 rounded-full font-bold shadow-xl transition-all active:scale-95 text-lg"
+            className="bg-emerald-600 hover:bg-emerald-500 text-white px-8 sm:px-10 py-3.5 sm:py-4 rounded-full font-bold shadow-xl transition-all active:scale-95 text-base sm:text-lg"
           >
             {t('verify.continue')}
           </LiquidButton>
         </div>
       ) : (
         <>
-          <div className="flex items-center gap-4 mb-8">
-            <div className="bg-emerald-100 p-3 rounded-2xl">
-              <FileCheck className="w-8 h-8 text-emerald-600" />
+          <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-8">
+            <div className="bg-emerald-100 p-2.5 sm:p-3 rounded-2xl shrink-0">
+              <FileCheck className="w-6 h-6 sm:w-8 sm:h-8 text-emerald-600" />
             </div>
             <div>
-              <h2 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">{t('verify.scan_complete')}</h2>
-              <p className="text-slate-500 font-medium text-xl">{t('verify.scan_desc')}</p>
+              <h2 className="text-2xl sm:text-5xl font-extrabold text-slate-900 tracking-tight">{t('verify.scan_complete')}</h2>
+              <p className="text-slate-500 font-medium text-sm sm:text-xl">{t('verify.scan_desc')}</p>
             </div>
           </div>
 

@@ -1013,8 +1013,9 @@ export function Login({ onSessionStarted }: Props) {
             >
               {/* ════════════════════════════════════════════════════════
                   LEFT PANEL — System Capabilities & Feature Showcase (~60%)
+                  (On mobile, renders below language selection)
               ════════════════════════════════════════════════════════ */}
-              <div className="lg:w-[58%] xl:w-[60%] w-full bg-transparent text-slate-900 px-5 py-2 sm:px-8 sm:py-3 lg:px-10 lg:py-3 flex flex-col justify-start relative overflow-hidden">
+              <div className="lg:w-[58%] xl:w-[60%] w-full bg-transparent text-slate-900 px-4 py-3 sm:px-8 sm:py-3 lg:px-10 lg:py-3 flex flex-col justify-start relative overflow-hidden order-2 lg:order-1">
                 {/* Decorative orbs */}
                 <div className="absolute top-0 right-0 w-80 h-80 bg-blue-100/60 rounded-full blur-3xl pointer-events-none" />
                 <div className="absolute bottom-0 left-0 w-64 h-64 bg-emerald-50/70 rounded-full blur-3xl pointer-events-none" />
@@ -1105,8 +1106,9 @@ export function Login({ onSessionStarted }: Props) {
 
               {/* ════════════════════════════════════════════════════════
                   RIGHT PANEL — Language Selection & Rotating Audio Loop (~40%)
+                  (On mobile, renders first at the very top of screen)
               ════════════════════════════════════════════════════════ */}
-              <div className="lg:w-[42%] xl:w-[40%] w-full bg-transparent px-4 py-2 sm:px-6 sm:py-3 lg:px-8 lg:py-3 flex flex-col justify-start items-center">
+              <div className="lg:w-[42%] xl:w-[40%] w-full bg-transparent px-3 py-2 sm:px-6 sm:py-3 lg:px-8 lg:py-3 flex flex-col justify-start items-center order-1 lg:order-2">
                 <div className="max-w-md w-full bg-white/85 backdrop-blur-xl border border-white p-4 sm:p-5 rounded-2xl shadow-xl shadow-slate-200/50 flex flex-col">
                   {/* Heading */}
                   <div className="mb-3 text-center">
@@ -1267,29 +1269,30 @@ export function Login({ onSessionStarted }: Props) {
             >
               {/* ════════════════════════════════════════════════════════
                   LEFT PANEL — Brand + Workflow Overview (~60%)
+                  (On mobile, renders below the interactive consent card)
               ════════════════════════════════════════════════════════ */}
-              <div className="lg:w-[62%] w-full bg-transparent text-slate-900 p-8 sm:p-12 lg:p-16 flex flex-col justify-center relative overflow-hidden">
+              <div className="lg:w-[62%] w-full bg-transparent text-slate-900 p-4 sm:p-12 lg:p-16 flex flex-col justify-center relative overflow-hidden order-2 lg:order-1">
                 {/* Decorative orbs */}
                 <div className="absolute top-0 right-0 w-96 h-96 bg-blue-100 rounded-full blur-3xl pointer-events-none" />
                 <div className="absolute bottom-0 left-0 w-72 h-72 bg-emerald-50 rounded-full blur-3xl pointer-events-none" />
 
                 {/* Hospital branding */}
-                <div className="relative z-10 mb-10">
-                  <div className="flex items-center gap-4 mb-6">
-                    <div className="w-14 h-14 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center">
-                      <img src={logoPNG} alt="SwasthyaSync" className="w-9 h-9 object-contain" />
+                <div className="relative z-10 mb-6 sm:mb-10">
+                  <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-6">
+                    <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white shadow-sm border border-slate-100 flex items-center justify-center shrink-0">
+                      <img src={logoPNG} alt="SwasthyaSync" className="w-8 h-8 sm:w-9 sm:h-9 object-contain" />
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500 font-bold uppercase tracking-widest">{t('workflow.gov_kiosk')}</p>
-                      <h2 className="text-2xl lg:text-3xl font-extrabold tracking-tight leading-tight text-slate-900">SwasthyaSync</h2>
+                      <p className="text-[10px] sm:text-xs text-slate-500 font-bold uppercase tracking-widest">{t('workflow.gov_kiosk')}</p>
+                      <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight leading-tight text-slate-900">SwasthyaSync</h2>
                     </div>
                   </div>
-                  <p className="text-slate-600 text-lg font-medium">{t('workflow.tagline')}</p>
+                  <p className="text-slate-600 text-sm sm:text-lg font-medium">{t('workflow.tagline')}</p>
                 </div>
 
                 {/* ── Workflow Steps (vertical connector style) ── */}
                 <div className="relative z-10 space-y-0">
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6">{t('workflow.how_it_works')}</p>
+                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-4 sm:mb-6">{t('workflow.how_it_works')}</p>
 
                   {[
                     {
@@ -1317,10 +1320,10 @@ export function Login({ onSessionStarted }: Props) {
                       color: 'bg-slate-500',
                     },
                   ].map((step, i, arr) => (
-                    <div key={i} className="flex items-stretch gap-5">
+                    <div key={i} className="flex items-stretch gap-4 sm:gap-5">
                       {/* Connector line + icon */}
                       <div className="flex flex-col items-center">
-                        <div className={`w-10 h-10 rounded-xl ${step.color} flex items-center justify-center text-white shrink-0 shadow-sm`}>
+                        <div className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl ${step.color} flex items-center justify-center text-white shrink-0 shadow-sm`}>
                           {step.icon}
                         </div>
                         {i < arr.length - 1 && (
@@ -1328,9 +1331,9 @@ export function Login({ onSessionStarted }: Props) {
                         )}
                       </div>
                       {/* Text */}
-                      <div className={`pb-6 ${i === arr.length - 1 ? 'pb-0' : ''}`}>
-                        <h4 className="text-sm font-bold text-slate-900 mb-0.5">{step.label}</h4>
-                        <p className="text-sm text-slate-500 leading-relaxed">{step.desc}</p>
+                      <div className={`pb-4 sm:pb-6 ${i === arr.length - 1 ? 'pb-0' : ''}`}>
+                        <h4 className="text-xs sm:text-sm font-bold text-slate-900 mb-0.5">{step.label}</h4>
+                        <p className="text-xs sm:text-sm text-slate-500 leading-relaxed">{step.desc}</p>
                       </div>
                     </div>
                   ))}
@@ -1339,8 +1342,9 @@ export function Login({ onSessionStarted }: Props) {
 
               {/* ════════════════════════════════════════════════════════
                   RIGHT PANEL — Consent + Action (~38%)
+                  (On mobile, renders first at top of screen)
               ════════════════════════════════════════════════════════ */}
-              <div className="lg:w-[38%] w-full bg-transparent p-8 sm:p-10 lg:p-12 flex flex-col justify-center items-center">
+              <div className="lg:w-[38%] w-full bg-transparent p-4 sm:p-10 lg:p-12 flex flex-col justify-center items-center order-1 lg:order-2">
                 <div className="max-w-md w-full bg-white/70 backdrop-blur-xl border border-white p-8 rounded-3xl shadow-xl shadow-slate-200/50">
                   {/* Change Language Navigation */}
                   <div className="flex items-center justify-between mb-4">

@@ -62,17 +62,18 @@ export function Layout({ children, isConnected = true, isKioskInterview = false,
   return (
     <div className="h-[100dvh] min-h-[100dvh] w-full bg-white flex flex-col overflow-hidden">
       {/* Top status bar — hospital-grade with subtle gradient border */}
-      <div className="w-full px-3 sm:px-6 py-1.5 flex items-center justify-between bg-gradient-to-r from-white via-slate-50/60 to-white border-b border-slate-200/80 text-xs shadow-2xs z-50 relative shrink-0">
-        <div className="flex items-center gap-2 sm:gap-3 text-slate-700 font-medium">
-          <div className="flex items-center gap-1.5">
+      <div className="w-full px-2.5 sm:px-6 py-1.5 flex items-center justify-between bg-gradient-to-r from-white via-slate-50/60 to-white border-b border-slate-200/80 text-xs shadow-2xs z-50 relative shrink-0">
+        <div className="flex items-center gap-1.5 sm:gap-3 text-slate-700 font-medium min-w-0">
+          <div className="flex items-center gap-1.5 shrink-0">
             <span className="w-2.5 h-2.5 rounded-full bg-blue-600 animate-pulse" />
-            <span className="text-slate-900 font-extrabold tracking-tight">SwasthyaSync v2.0</span>
+            <span className="text-slate-900 font-extrabold tracking-tight text-[11px] sm:text-xs">SwasthyaSync</span>
           </div>
           {isKioskInterview && (
             clinicMode === 'ayush' ? (
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-extrabold bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-800 border border-emerald-300 shadow-2xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                <span>🌿 Ministry of AYUSH · CCRAS Validated Protocol</span>
+              <span className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-extrabold bg-gradient-to-r from-emerald-50 to-teal-50 text-emerald-800 border border-emerald-300 shadow-2xs truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse shrink-0" />
+                <span className="hidden sm:inline">🌿 Ministry of AYUSH · CCRAS Validated Protocol</span>
+                <span className="sm:hidden">🌿 AYUSH · CCRAS</span>
               </span>
             ) : (
               <span className="hidden sm:inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 shadow-2xs">
@@ -152,8 +153,8 @@ export function Layout({ children, isConnected = true, isKioskInterview = false,
             </>
           )}
 
-          <span className="text-slate-500 font-medium text-xs">{currentTime}</span>
-          <div className={`flex items-center gap-1 sm:gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold shadow-2xs transition-all duration-300 ${
+          <span className="text-slate-500 font-medium text-xs hidden sm:inline">{currentTime}</span>
+          <div className={`flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-0.5 rounded-full text-[11px] sm:text-xs font-bold shadow-2xs transition-all duration-300 shrink-0 ${
             isConnected 
               ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' 
               : 'bg-red-50 text-red-700 border border-red-200'
@@ -166,8 +167,8 @@ export function Layout({ children, isConnected = true, isKioskInterview = false,
             ) : (
               <span className="inline-flex rounded-full h-2 w-2 bg-red-500"></span>
             )}
-            {isConnected ? <Wifi className="w-3 h-3" /> : <WifiOff className="w-3 h-3" />}
-            {isConnected ? 'Connected' : 'Disconnected'}
+            {isConnected ? <Wifi className="w-3 h-3 hidden xs:inline" /> : <WifiOff className="w-3 h-3 hidden xs:inline" />}
+            <span className="hidden sm:inline">{isConnected ? 'Connected' : 'Offline'}</span>
           </div>
         </div>
       </div>
@@ -176,10 +177,10 @@ export function Layout({ children, isConnected = true, isKioskInterview = false,
       <div className="flex-1 flex flex-col w-full h-full relative overflow-hidden bg-slate-50">
         {/* Floating Header: ONLY rendered on non-interview screens */}
         {!isKioskInterview && (
-          <div className="absolute top-4 left-0 right-0 z-40 flex justify-center px-4 pointer-events-none">
+          <div className="absolute top-2 sm:top-4 left-0 right-0 z-40 flex justify-center px-2 sm:px-4 pointer-events-none">
             <motion.header 
               style={motionHeaderStyle}
-              className="pointer-events-auto w-full max-w-3xl px-4 sm:px-6 py-2.5 sm:py-3 flex items-center justify-between bg-white border border-slate-100 rounded-full shadow-lg z-10"
+              className="pointer-events-auto w-full max-w-3xl px-3 sm:px-6 py-2 sm:py-2.5 flex items-center justify-between bg-white border border-slate-100 rounded-full shadow-lg z-10"
             >
               <div className="flex items-center">
                 <motion.div

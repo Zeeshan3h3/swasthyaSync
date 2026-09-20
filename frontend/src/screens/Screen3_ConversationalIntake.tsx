@@ -11,7 +11,7 @@ import { LiquidButton } from '../components/ui/button';
  */
 
 import { useEffect, useCallback, useRef, useState, useMemo } from 'react';
-import { Mic, TriangleAlert, SkipForward, Volume2, VolumeX, Send, ArrowLeft, Loader2, Globe, Bot, User, Sparkles } from 'lucide-react';
+import { Mic, TriangleAlert, SkipForward, Volume2, VolumeX, Send, ArrowLeft, Loader2, Globe, Bot, User, Sparkles, X, ChevronDown } from 'lucide-react';
 import { AbstractOrb } from '../components/AbstractOrb';
 import type { OrbState } from '../components/AbstractOrb';
 import type { UIInstruction } from '../hooks/useConversation';
@@ -49,6 +49,7 @@ export function Screen3_ConversationalIntake({
   const [inputText, setInputText] = useState('');
   const [leftPanelTab, setLeftPanelTab] = useState<'transcript' | 'all_fields'>('transcript');
   const [checklistModalOpen, setChecklistModalOpen] = useState(false);
+  const [mobileSummaryOpen, setMobileSummaryOpen] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
   const isAyush = Boolean(
@@ -127,227 +128,298 @@ export function Screen3_ConversationalIntake({
   const effectiveOrbState: OrbState = isRecording ? 'listening' : isSpeaking ? 'speaking' : orbState;
   const micRingOpacity = isRecording ? Math.min(audioLevel * 2, 1) : 0;
 
+  const renderPanelContent = () => (
+    <>
+      {/* Mode-specific Tab Switcher: Only render tabs if in AYUSH mode */}
+      {isAyush && (
+        <div className="flex items-center p-1 bg-slate-100/90 rounded-xl mb-2.5 shrink-0 border border-slate-200/80 shadow-2xs">
+          <button
+            type="button"
+            onClick={() => setLeftPanelTab('transcript')}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              leftPanelTab === 'transcript'
+                ? 'bg-white text-slate-800 shadow-2xs border border-slate-200/60'
+                : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <span>💬</span>
+            <span>{t('interview.conversation')}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setLeftPanelTab('all_fields')}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+              leftPanelTab === 'all_fields'
+                ? 'bg-emerald-600 text-white shadow-2xs'
+                : 'text-emerald-700 hover:text-emerald-950 hover:bg-emerald-50'
+            }`}
+          >
+            <span>🌿</span>
+            <span>AYUSH 25 Checks</span>
+            {collectedFieldCount > 0 && (
+              <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                leftPanelTab === 'all_fields' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
+              }`}>
+                {collectedFieldCount}/25
+              </span>
+            )}
+          </button>
+        </div>
+      )}
+
+      {(!isAyush || leftPanelTab === 'transcript') ? (
+        <>
+          {/* Live Clinical Summary Badge Card */}
+          <div className="mb-2 shrink-0">
+            <div className="flex items-center justify-between mb-1.5">
+              <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
+                <Sparkles className="w-3.5 h-3.5 text-blue-600" />
+                <span>{t('interview.live_summary')}</span>
+              </h3>
+              <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full shadow-2xs">
+                AUTO-EXTRACT
+              </span>
+            </div>
+            <ClinicalSummaryBadge summary={ui.section_summary} clinicMode={ui.clinic_mode} emptyText={t('interview.waiting_info')} />
+          </div>
+
+          {/* Conversation Header */}
+          <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 mb-1.5 shrink-0">
+            <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-widest">
+              {t('interview.conversation')}
+            </h3>
+            <span className="bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full text-[10px] tracking-wide">
+              LIVE TRANSCRIPT
+            </span>
+          </div>
+
+          {/* Conversation Message List (Independent Internal Scroll) */}
+          <div className="flex-1 overflow-y-auto space-y-3 pr-1.5 scrollbar-thin scrollbar-thumb-slate-200 min-h-[120px]">
+            {ui.conversation_history && ui.conversation_history.length > 0 ? (
+              ui.conversation_history.map((msg, i) => {
+                const isPatient = msg.role === 'patient' || msg.role === 'user';
+                return (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 8, scale: isPatient ? 0.98 : 1 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
+                    key={i} 
+                    className={`flex flex-col ${isPatient ? 'items-end' : 'items-start'}`}
+                  >
+                    <span className={`text-[11px] font-bold mb-1 uppercase tracking-wider flex items-center gap-1 ${
+                      isPatient ? 'text-blue-600' : 'text-slate-500'
+                    }`}>
+                      {isPatient ? (
+                        <>
+                          <span>{t('interview.you')}</span>
+                          <User className="w-3 h-3 text-blue-500" />
+                        </>
+                      ) : (
+                        <>
+                          <Bot className="w-3.5 h-3.5 text-indigo-600" />
+                          <span>{t('interview.ai_doctor')}</span>
+                        </>
+                      )}
+                    </span>
+                    <div className={`px-3.5 py-2.5 rounded-2xl max-w-[92%] text-sm font-medium leading-relaxed shadow-card ${
+                      isPatient 
+                        ? 'bg-blue-600 text-white rounded-tr-xs shadow-blue-600/15' 
+                        : 'bg-white text-slate-800 rounded-tl-xs border border-slate-200/90'
+                    }`}>
+                      {msg.content}
+                    </div>
+                  </motion.div>
+                );
+              })
+            ) : (
+              <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm font-medium py-8">
+                <span className="block mb-1.5 text-2xl">👋</span>
+                <span>Say hello or speak your symptom to start!</span>
+              </div>
+            )}
+            <div ref={chatEndRef} className="h-2" />
+          </div>
+        </>
+      ) : (
+        /* ALL FIELDS FULL-HEIGHT INSPECTOR VIEW */
+        <div className="flex-1 overflow-y-auto pr-1 flex flex-col min-h-[140px]">
+          <div className="flex items-center justify-between mb-2 shrink-0">
+            <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+              <span>{isAyush ? '🌿' : '📋'}</span>
+              <span>{isAyush ? '25 CCRAS Checks' : 'All Clinical Fields'}</span>
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setChecklistModalOpen(true)}
+                className="text-[10px] font-extrabold bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-full cursor-pointer transition-colors flex items-center gap-1 shadow-2xs"
+                title="Open full screen modal"
+              >
+                <span>🔍</span>
+                <span>Expand</span>
+              </button>
+              <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded-full">
+                100% DB
+              </span>
+            </div>
+          </div>
+
+          {isAyush ? (
+            <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
+              {/* Live Prakriti Dominance Mini Banner */}
+              <ClinicalSummaryBadge summary={ui.section_summary} clinicMode={ui.clinic_mode} />
+
+              {/* 25 Authentic CCRAS Checks List */}
+              <div className="border-t border-slate-200 pt-2 space-y-1.5">
+                <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 px-1">
+                  <span>CCRAS Protocol Checks</span>
+                  <span className="text-emerald-700 font-bold">{collectedFieldCount}/25 Verified</span>
+                </div>
+
+                {ALL_25_AYUSH_CHECKS.map((item) => {
+                  const val = getAyushCheckValue(item, collectedMap);
+                  const isDone = Boolean(val);
+                  const isCurrent = ui.current_field_id === item.id || Boolean(item.aliases && ui.current_field_id && item.aliases.includes(ui.current_field_id));
+
+                  return (
+                    <div
+                      key={item.id}
+                      className={`p-2 rounded-xl border text-left transition-all ${
+                        isDone
+                          ? 'bg-emerald-50/70 border-emerald-200/80 shadow-2xs'
+                          : isCurrent
+                          ? 'bg-amber-50/90 border-amber-300 shadow-2xs ring-1 ring-amber-200'
+                          : 'bg-white border-slate-200/70 opacity-80'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-1.5 mb-0.5">
+                        <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5 truncate">
+                          <span className="text-sm shrink-0">{item.icon}</span>
+                          <span className="truncate">{item.ayurvedicTerm}</span>
+                        </span>
+                        {isDone ? (
+                          <span className="text-[9px] font-extrabold bg-emerald-600 text-white px-1.5 py-0.2 rounded-full shrink-0 flex items-center gap-0.5">
+                            <span>✓</span>
+                            <span>Done</span>
+                          </span>
+                        ) : isCurrent ? (
+                          <span className="text-[9px] font-extrabold bg-amber-500 text-white px-1.5 py-0.2 rounded-full shrink-0 animate-pulse">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded-full shrink-0">
+                            Pending
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-[10px] text-emerald-800 font-medium pl-5 truncate">
+                        {item.ayurvedicHindi}
+                      </div>
+                      {isDone && (
+                        <div className="mt-1 pl-5 text-[10px] font-bold text-emerald-950 bg-white/80 p-1 rounded-md border border-emerald-200/70 truncate">
+                          {val}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          ) : (
+            <ClinicalSummaryBadge summary={ui.section_summary} clinicMode={ui.clinic_mode} showAllFields={true} />
+          )}
+        </div>
+      )}
+    </>
+  );
+
   return (
     <motion.div 
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="h-full w-full flex flex-col md:flex-row bg-slate-50 overflow-hidden select-none"
+      className="h-full w-full flex flex-col md:flex-row bg-slate-50 overflow-hidden select-none relative"
     >
       {/* ─────────────────────────────────────────────────────────────
-          LEFT PANEL: Structured Clinical Summary & Chat Transcript
+          DESKTOP LEFT PANEL: Structured Clinical Summary & Chat Transcript
+          (Hidden on mobile, side-by-side on md+ screens)
       ───────────────────────────────────────────────────────────── */}
-      <div className="w-full md:w-[320px] lg:w-[360px] bg-white border-b md:border-b-0 md:border-r border-slate-200 p-4 flex flex-col h-[38vh] md:h-full overflow-hidden shrink-0 shadow-xs z-10">
-        {/* Mode-specific Tab Switcher: Only render tabs if in AYUSH mode */}
-        {isAyush && (
-          <div className="flex items-center p-1 bg-slate-100/90 rounded-xl mb-2.5 shrink-0 border border-slate-200/80 shadow-2xs">
-            <button
-              type="button"
-              onClick={() => setLeftPanelTab('transcript')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                leftPanelTab === 'transcript'
-                  ? 'bg-white text-slate-800 shadow-2xs border border-slate-200/60'
-                  : 'text-slate-500 hover:text-slate-800'
-              }`}
-            >
-              <span>💬</span>
-              <span>{t('interview.conversation')}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setLeftPanelTab('all_fields')}
-              className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
-                leftPanelTab === 'all_fields'
-                  ? 'bg-emerald-600 text-white shadow-2xs'
-                  : 'text-emerald-700 hover:text-emerald-950 hover:bg-emerald-50'
-              }`}
-            >
-              <span>🌿</span>
-              <span>AYUSH 25 Checks</span>
-              {collectedFieldCount > 0 && (
-                <span className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
-                  leftPanelTab === 'all_fields' ? 'bg-white/20 text-white' : 'bg-slate-200 text-slate-700'
-                }`}>
-                  {collectedFieldCount}/25
-                </span>
-              )}
-            </button>
-          </div>
-        )}
-
-        {(!isAyush || leftPanelTab === 'transcript') ? (
-          <>
-            {/* Live Clinical Summary Badge Card */}
-            <div className="mb-2 shrink-0">
-              <div className="flex items-center justify-between mb-1.5">
-                <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
-                  <Sparkles className="w-3.5 h-3.5 text-blue-600" />
-                  <span>{t('interview.live_summary')}</span>
-                </h3>
-                <span className="text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200 px-2 py-0.5 rounded-full shadow-2xs">
-                  AUTO-EXTRACT
-                </span>
-              </div>
-              <ClinicalSummaryBadge summary={ui.section_summary} clinicMode={ui.clinic_mode} emptyText={t('interview.waiting_info')} />
-            </div>
-
-            {/* Conversation Header */}
-            <div className="flex items-center justify-between pb-1.5 border-b border-slate-100 mb-1.5 shrink-0">
-              <h3 className="text-xs font-extrabold text-slate-500 uppercase tracking-widest">
-                {t('interview.conversation')}
-              </h3>
-              <span className="bg-slate-100 text-slate-500 font-bold px-2 py-0.5 rounded-full text-[10px] tracking-wide">
-                LIVE TRANSCRIPT
-              </span>
-            </div>
-
-            {/* Conversation Message List (Independent Internal Scroll) */}
-            <div className="flex-1 overflow-y-auto space-y-3 pr-1.5 scrollbar-thin scrollbar-thumb-slate-200">
-              {ui.conversation_history && ui.conversation_history.length > 0 ? (
-                ui.conversation_history.map((msg, i) => {
-                  const isPatient = msg.role === 'patient' || msg.role === 'user';
-                  return (
-                    <motion.div 
-                      initial={{ opacity: 0, y: 8, scale: isPatient ? 0.98 : 1 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-                      key={i} 
-                      className={`flex flex-col ${isPatient ? 'items-end' : 'items-start'}`}
-                    >
-                      <span className={`text-[11px] font-bold mb-1 uppercase tracking-wider flex items-center gap-1 ${
-                        isPatient ? 'text-blue-600' : 'text-slate-500'
-                      }`}>
-                        {isPatient ? (
-                          <>
-                            <span>{t('interview.you')}</span>
-                            <User className="w-3 h-3 text-blue-500" />
-                          </>
-                        ) : (
-                          <>
-                            <Bot className="w-3.5 h-3.5 text-indigo-600" />
-                            <span>{t('interview.ai_doctor')}</span>
-                          </>
-                        )}
-                      </span>
-                      <div className={`px-3.5 py-2.5 rounded-2xl max-w-[92%] text-sm font-medium leading-relaxed shadow-card ${
-                        isPatient 
-                          ? 'bg-blue-600 text-white rounded-tr-xs shadow-blue-600/15' 
-                          : 'bg-white text-slate-800 rounded-tl-xs border border-slate-200/90'
-                      }`}>
-                        {msg.content}
-                      </div>
-                    </motion.div>
-                  );
-                })
-              ) : (
-                <div className="h-full flex flex-col items-center justify-center text-slate-400 text-sm font-medium py-8">
-                  <span className="block mb-1.5 text-2xl">👋</span>
-                  <span>Say hello or speak your symptom to start!</span>
-                </div>
-              )}
-              <div ref={chatEndRef} className="h-2" />
-            </div>
-          </>
-        ) : (
-          /* ALL FIELDS FULL-HEIGHT INSPECTOR VIEW */
-          <div className="flex-1 overflow-y-auto pr-1 flex flex-col">
-            <div className="flex items-center justify-between mb-2 shrink-0">
-              <span className="text-xs font-extrabold uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
-                <span>{isAyush ? '🌿' : '📋'}</span>
-                <span>{isAyush ? '25 CCRAS Checks' : 'All Clinical Fields'}</span>
-              </span>
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => setChecklistModalOpen(true)}
-                  className="text-[10px] font-extrabold bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 px-2 py-0.5 rounded-full cursor-pointer transition-colors flex items-center gap-1 shadow-2xs"
-                  title="Open full screen modal"
-                >
-                  <span>🔍</span>
-                  <span>Expand</span>
-                </button>
-                <span className="text-[10px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-300 px-1.5 py-0.5 rounded-full">
-                  100% DB
-                </span>
-              </div>
-            </div>
-
-            {isAyush ? (
-              <div className="flex-1 overflow-y-auto space-y-2 pr-1 scrollbar-thin scrollbar-thumb-slate-200">
-                {/* Live Prakriti Dominance Mini Banner */}
-                <ClinicalSummaryBadge summary={ui.section_summary} clinicMode={ui.clinic_mode} />
-
-                {/* 25 Authentic CCRAS Checks List */}
-                <div className="border-t border-slate-200 pt-2 space-y-1.5">
-                  <div className="flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-500 mb-1 px-1">
-                    <span>CCRAS Protocol Checks</span>
-                    <span className="text-emerald-700 font-bold">{collectedFieldCount}/25 Verified</span>
-                  </div>
-
-                  {ALL_25_AYUSH_CHECKS.map((item) => {
-                    const val = getAyushCheckValue(item, collectedMap);
-                    const isDone = Boolean(val);
-                    const isCurrent = ui.current_field_id === item.id || Boolean(item.aliases && ui.current_field_id && item.aliases.includes(ui.current_field_id));
-
-                    return (
-                      <div
-                        key={item.id}
-                        className={`p-2 rounded-xl border text-left transition-all ${
-                          isDone
-                            ? 'bg-emerald-50/70 border-emerald-200/80 shadow-2xs'
-                            : isCurrent
-                            ? 'bg-amber-50/90 border-amber-300 shadow-2xs ring-1 ring-amber-200'
-                            : 'bg-white border-slate-200/70 opacity-80'
-                        }`}
-                      >
-                        <div className="flex items-start justify-between gap-1.5 mb-0.5">
-                          <span className="text-[11px] font-black text-slate-900 flex items-center gap-1.5 truncate">
-                            <span className="text-sm shrink-0">{item.icon}</span>
-                            <span className="truncate">{item.ayurvedicTerm}</span>
-                          </span>
-                          {isDone ? (
-                            <span className="text-[9px] font-extrabold bg-emerald-600 text-white px-1.5 py-0.2 rounded-full shrink-0 flex items-center gap-0.5">
-                              <span>✓</span>
-                              <span>Done</span>
-                            </span>
-                          ) : isCurrent ? (
-                            <span className="text-[9px] font-extrabold bg-amber-500 text-white px-1.5 py-0.2 rounded-full shrink-0 animate-pulse">
-                              Active
-                            </span>
-                          ) : (
-                            <span className="text-[9px] font-bold text-slate-400 bg-slate-100 px-1.5 py-0.2 rounded-full shrink-0">
-                              Pending
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-[10px] text-emerald-800 font-medium pl-5 truncate">
-                          {item.ayurvedicHindi}
-                        </div>
-                        {isDone && (
-                          <div className="mt-1 pl-5 text-[10px] font-bold text-emerald-950 bg-white/80 p-1 rounded-md border border-emerald-200/70 truncate">
-                            {val}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : (
-              <ClinicalSummaryBadge summary={ui.section_summary} clinicMode={ui.clinic_mode} showAllFields={true} />
-            )}
-          </div>
-        )}
+      <div className="hidden md:flex md:w-[320px] lg:w-[360px] bg-white md:border-r border-slate-200 p-4 flex-col h-full overflow-hidden shrink-0 shadow-xs z-10">
+        {renderPanelContent()}
       </div>
 
       {/* ─────────────────────────────────────────────────────────────
-          RIGHT PANEL: Main Kiosk Interaction Viewport (100% Pinned)
+          MOBILE BOTTOM SHEET DRAWER: Clinical Summary & Transcript
       ───────────────────────────────────────────────────────────── */}
-      <div className="flex-1 flex flex-col justify-between p-3 sm:p-5 h-[62vh] md:h-full overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50/20">
+      <AnimatePresence>
+        {mobileSummaryOpen && (
+          <>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setMobileSummaryOpen(false)}
+              className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-40 md:hidden"
+            />
+            <motion.div
+              initial={{ y: '100%' }}
+              animate={{ y: 0 }}
+              exit={{ y: '100%' }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              className="fixed inset-x-0 bottom-0 z-50 bg-white rounded-t-3xl shadow-2xl flex flex-col max-h-[82dvh] md:hidden border-t border-slate-200 overflow-hidden"
+            >
+              {/* Drag Handle & Header */}
+              <div className="w-12 h-1 bg-slate-300 rounded-full mx-auto mt-2.5 mb-1 shrink-0" />
+              <div className="px-4 py-2 border-b border-slate-100 shrink-0 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">{isAyush ? '🌿' : '📋'}</span>
+                  <span className="font-extrabold text-sm text-slate-800">
+                    {isAyush ? 'AYUSH Summary & 25 Checks' : 'Live Clinical Summary & Transcript'}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMobileSummaryOpen(false)}
+                  className="p-1.5 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                  aria-label="Close summary"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* Sheet Body */}
+              <div className="flex-1 overflow-y-auto p-3.5 flex flex-col min-h-0">
+                {renderPanelContent()}
+              </div>
+            </motion.div>
+          </>
+        )}
+      </AnimatePresence>
+
+      {/* ─────────────────────────────────────────────────────────────
+          MAIN KIOSK INTERACTION VIEWPORT (100% Height on Mobile & Desktop)
+      ───────────────────────────────────────────────────────────── */}
+      <div className="flex-1 flex flex-col justify-between p-2.5 xs:p-3 sm:p-5 h-full overflow-hidden bg-gradient-to-br from-slate-50 via-white to-blue-50/20">
         
         {/* Top Progress & Badges (Pinned) */}
         <div className="w-full max-w-2xl mx-auto flex flex-col items-center gap-2 shrink-0">
-          <div className="flex items-center gap-2.5 flex-wrap justify-center">
+          {/* Mobile-Only Summary Toggle Pill */}
+          <div className="flex items-center justify-between w-full md:hidden mb-0.5 shrink-0 px-1">
+            <button
+              type="button"
+              onClick={() => setMobileSummaryOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-1 bg-white border border-slate-200/90 shadow-2xs rounded-full text-xs font-bold text-slate-700 active:scale-95 transition-transform cursor-pointer hover:bg-slate-50"
+            >
+              <span>{isAyush ? '🌿' : '📋'}</span>
+              <span>{isAyush ? `AYUSH Checks (${collectedFieldCount}/25)` : 'Summary & Transcript'}</span>
+              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </button>
+            <span className="text-[10px] font-bold text-blue-600 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-full">
+              LIVE SYNC
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2 flex-wrap justify-center">
             {isAyush ? (
               <span className="px-3.5 py-1 bg-gradient-to-r from-emerald-100 via-teal-100 to-amber-100 text-emerald-950 border border-emerald-300 rounded-full text-xs font-extrabold uppercase tracking-wider shadow-2xs flex items-center gap-1.5">
                 <span className="text-sm">🌿</span>
@@ -427,7 +499,7 @@ export function Screen3_ConversationalIntake({
         <div className="flex-1 flex flex-col items-center justify-center min-h-0 overflow-y-auto w-full max-w-4xl mx-auto px-2 py-2 text-center">
           
           {/* AI Medical Orb */}
-          <div className="relative mb-3 shrink-0">
+          <div className="relative mb-2 sm:mb-3 shrink-0">
             <AbstractOrb interactionState={effectiveOrbState} size="sm" />
             <AnimatePresence>
               {isSpeaking && (
@@ -436,7 +508,7 @@ export function Screen3_ConversationalIntake({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 2, scale: 0.9 }}
                   transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                  className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 shadow-card"
+                  className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-[11px] font-bold text-blue-600 bg-blue-50 px-2.5 py-0.5 rounded-full border border-blue-200 shadow-card whitespace-nowrap"
                 >
                   <Volume2 className="w-3 h-3 animate-pulse text-blue-600" />
                   <span>SPEAKING</span>
@@ -448,7 +520,7 @@ export function Screen3_ConversationalIntake({
                   animate={{ opacity: 1, y: 0, scale: 1 }}
                   exit={{ opacity: 0, y: 2, scale: 0.9 }}
                   transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
-                  className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-[11px] font-bold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200 shadow-card"
+                  className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-[11px] font-bold text-red-600 bg-red-50 px-2.5 py-0.5 rounded-full border border-red-200 shadow-card whitespace-nowrap"
                 >
                   <span className="w-2 h-2 bg-red-500 rounded-full animate-ping" />
                   <span>LISTENING</span>
@@ -462,18 +534,18 @@ export function Screen3_ConversationalIntake({
             <motion.p 
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
-              className="text-sm sm:text-base text-emerald-600 font-semibold mb-1 max-w-lg shrink-0"
+              className="text-xs sm:text-base text-emerald-600 font-semibold mb-1 max-w-lg shrink-0"
             >
               {typeof ui.ack === 'string' ? ui.ack : JSON.stringify(ui.ack)}
             </motion.p>
           )}
 
           {/* Primary Question Heading */}
-          <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-900 leading-snug px-3 my-2 max-w-3xl shrink-0">
+          <h2 className="text-lg xs:text-xl sm:text-2xl lg:text-3xl font-extrabold text-slate-900 leading-snug px-2 sm:px-3 my-1 sm:my-2 max-w-3xl shrink-0">
             {isProcessing ? (
               <span className="flex flex-col items-center gap-2 text-blue-600/70 my-1">
-                <Loader2 className="w-7 h-7 animate-spin" />
-                <span className="text-base font-bold animate-pulse">{t('interview.processing')}</span>
+                <Loader2 className="w-6 h-6 sm:w-7 sm:h-7 animate-spin" />
+                <span className="text-sm sm:text-base font-bold animate-pulse">{t('interview.processing')}</span>
               </span>
             ) : (
               typeof ui.prompt === 'string' ? ui.prompt : JSON.stringify(ui.prompt)
@@ -481,7 +553,7 @@ export function Screen3_ConversationalIntake({
           </h2>
           
           {sttError && (
-            <div className="bg-red-50 text-red-600 px-3.5 py-1.5 rounded-xl text-xs font-medium border border-red-200 flex items-center gap-2 my-2 shrink-0">
+            <div className="bg-red-50 text-red-600 px-3.5 py-1.5 rounded-xl text-xs font-medium border border-red-200 flex items-center gap-2 my-1 sm:my-2 shrink-0">
               <TriangleAlert className="w-4 h-4" />
               <span>{sttError}</span>
             </div>
@@ -489,7 +561,7 @@ export function Screen3_ConversationalIntake({
 
           {/* Dynamic Option Cards with Medical Emojis */}
           {Array.isArray(ui.options) && ui.options.length > 0 && (
-            <div className="flex flex-wrap justify-center gap-3 w-full max-w-4xl my-2 px-1">
+            <div className="flex flex-wrap justify-center gap-2 sm:gap-3 w-full max-w-4xl my-1 sm:my-2 px-1">
               {ui.options.map((opt, idx) => {
                 const label = typeof opt === 'string' ? opt : (opt.label || String(opt));
                 const labelTranslated = typeof opt === 'object' ? opt.label_translated : undefined;
@@ -507,17 +579,17 @@ export function Screen3_ConversationalIntake({
                     id={`option-${idx}`}
                     onClick={() => handleOptionTap(opt as any)}
                     disabled={isProcessing || isRecording}
-                    className={`flex items-center gap-3.5 px-5 py-3 sm:px-6 sm:py-3.5 bg-white border-2 ${visual.badgeBorder} rounded-2xl hover:shadow-card-hover active:scale-[0.97] transition-[transform,box-shadow,border-color,background-color] duration-150 text-left shadow-card border-b-4 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer min-h-[58px] min-w-[190px] sm:min-w-[210px] flex-1 max-w-[340px]`}
+                    className={`flex items-center gap-2.5 xs:gap-3.5 px-3.5 py-2.5 xs:px-5 xs:py-3 sm:px-6 sm:py-3.5 bg-white border-2 ${visual.badgeBorder} rounded-2xl hover:shadow-card-hover active:scale-[0.97] transition-[transform,box-shadow,border-color,background-color] duration-150 text-left shadow-card border-b-4 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer min-h-[50px] xs:min-h-[56px] min-w-[135px] xs:min-w-[160px] sm:min-w-[210px] flex-1 max-w-[340px]`}
                   >
-                    <span className="text-2xl sm:text-3xl shrink-0 select-none leading-none">
+                    <span className="text-xl xs:text-2xl sm:text-3xl shrink-0 select-none leading-none">
                       {visual.emoji}
                     </span>
                     <div className="min-w-0 flex-1">
-                      <span className="block text-sm sm:text-base font-extrabold text-slate-800 leading-snug whitespace-normal break-words">
+                      <span className="block text-xs xs:text-sm sm:text-base font-extrabold text-slate-800 leading-snug whitespace-normal break-words">
                         {labelTranslated || label}
                       </span>
                       {hasSubtitle && (
-                        <span className="block text-xs font-semibold text-slate-500 whitespace-normal break-words mt-0.5">
+                        <span className="block text-[10px] xs:text-xs font-semibold text-slate-500 whitespace-normal break-words mt-0.5">
                           {label}
                         </span>
                       )}
@@ -532,18 +604,18 @@ export function Screen3_ConversationalIntake({
         {/* ─────────────────────────────────────────────────────────────
             BOTTOM CONTROLS: Firmly Anchored Sticky Dock
         ───────────────────────────────────────────────────────────── */}
-        <div className="w-full max-w-xl mx-auto flex flex-col items-center gap-2 pt-2 border-t border-slate-200/80 shrink-0">
+        <div className="w-full max-w-xl mx-auto flex flex-col items-center gap-1.5 sm:gap-2 pt-1.5 sm:pt-2 border-t border-slate-200/80 shrink-0">
           
           {/* Quick text input form */}
           <form onSubmit={handleTextSubmit} className="flex w-full gap-2 relative">
-            <div className="w-full flex items-center bg-white border border-slate-200 rounded-full pl-5 pr-14 py-2.5 shadow-card focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:shadow-card-hover transition-[border-color,box-shadow] duration-200">
+            <div className="w-full flex items-center bg-white border border-slate-200 rounded-full pl-4 pr-12 xs:pl-5 xs:pr-14 py-2 xs:py-2.5 shadow-card focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:shadow-card-hover transition-[border-color,box-shadow] duration-200">
               <input 
                 type="text" 
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 disabled={isProcessing || isRecording}
                 placeholder={t('interview.type_response')}
-                className="w-full bg-transparent border-none text-sm sm:text-base font-semibold text-slate-800 focus:outline-none disabled:opacity-50 placeholder:text-slate-400"
+                className="w-full bg-transparent border-none text-xs xs:text-sm sm:text-base font-semibold text-slate-800 focus:outline-none disabled:opacity-50 placeholder:text-slate-400"
               />
             </div>
             <LiquidButton 
@@ -552,34 +624,34 @@ export function Screen3_ConversationalIntake({
               disabled={isProcessing || isRecording || !inputText.trim()}
               className="absolute right-1 top-1 bottom-1 aspect-square flex items-center justify-center bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-40 disabled:bg-slate-200 disabled:text-slate-400 transition-[background-color,transform] duration-150 active:scale-[0.97] cursor-pointer shadow-xs"
             >
-              <Send className="w-4 h-4" />
+              <Send className="w-3.5 h-3.5 xs:w-4 xs:h-4" />
             </LiquidButton>
           </form>
 
           {/* Action Dock: Back, Replay, Large Mic Button, Skip */}
-          <div className="flex items-center justify-between w-full gap-2">
+          <div className="flex items-center justify-between w-full gap-1.5 xs:gap-2">
             
             {/* Back Button */}
             <LiquidButton
               id="btn-back"
               onClick={onBack}
-              className="group flex items-center justify-center gap-1.5 px-3.5 sm:px-5 py-2.5 rounded-full font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-800 transition-[transform,background-color,color] duration-150 active:scale-[0.97] text-xs sm:text-sm cursor-pointer shrink-0 shadow-2xs"
+              className="group flex items-center justify-center gap-1 xs:gap-1.5 px-2.5 xs:px-3.5 sm:px-5 py-2 xs:py-2.5 rounded-full font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 hover:text-slate-800 transition-[transform,background-color,color] duration-150 active:scale-[0.97] text-xs sm:text-sm cursor-pointer shrink-0 shadow-2xs"
             >
-              <ArrowLeft className="w-4 h-4 group-hover:-translate-x-0.5 transition-transform" />
+              <ArrowLeft className="w-3.5 h-3.5 xs:w-4 xs:h-4 group-hover:-translate-x-0.5 transition-transform" />
               <span className="hidden xs:inline">{t('phone.back')}</span>
             </LiquidButton>
 
             {/* Central Voice Controls */}
-            <div className="flex items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-1.5 xs:gap-2 sm:gap-3">
               <LiquidButton
                 id="btn-tts-toggle"
                 type="button"
                 aria-label={isSpeaking ? 'Stop speaking' : 'Replay prompt'}
                 onClick={() => isSpeaking ? stopTTS() : speak(ui.prompt || '', ui.language || 'hi-IN')}
                 title={isSpeaking ? 'Stop speaking' : 'Replay prompt'}
-                className="p-2.5 rounded-full text-slate-600 bg-white border border-slate-200 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/70 transition-[border-color,background-color,color,transform] duration-150 active:scale-[0.97] shrink-0 cursor-pointer shadow-card"
+                className="p-2 xs:p-2.5 rounded-full text-slate-600 bg-white border border-slate-200 hover:text-blue-600 hover:border-blue-300 hover:bg-blue-50/70 transition-[border-color,background-color,color,transform] duration-150 active:scale-[0.97] shrink-0 cursor-pointer shadow-card"
               >
-                {isSpeaking ? <VolumeX className="w-4 h-4 sm:w-5 sm:h-5 text-red-500" /> : <Volume2 className="w-4 h-4 sm:w-5 sm:h-5" />}
+                {isSpeaking ? <VolumeX className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-red-500" /> : <Volume2 className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5" />}
               </LiquidButton>
 
               {/* Hold to Speak Button */}
@@ -601,13 +673,13 @@ export function Screen3_ConversationalIntake({
                   onTouchEnd={handleMicRelease}
                   onTouchCancel={handleMicRelease}
                   disabled={isProcessing}
-                  className={`relative flex items-center justify-center gap-2 px-5 sm:px-8 py-3 rounded-full font-extrabold text-white transition-[transform,box-shadow,background-color] duration-150 active:scale-[0.97] shadow-card-hover text-xs sm:text-base ${
+                  className={`relative flex items-center justify-center gap-1.5 xs:gap-2 px-3.5 xs:px-5 sm:px-8 py-2 xs:py-2.5 sm:py-3 rounded-full font-extrabold text-white transition-[transform,box-shadow,background-color] duration-150 active:scale-[0.97] shadow-card-hover text-xs sm:text-base ${
                     isRecording
                       ? 'bg-red-600 shadow-red-600/40 scale-102 animate-pulse'
                       : 'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-600/25 hover:from-blue-700 hover:to-indigo-700'
-                  } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 min-w-[150px] sm:min-w-[190px]`}
+                  } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 min-w-[130px] xs:min-w-[150px] sm:min-w-[190px]`}
                 >
-                  {isRecording ? <Mic className="w-4 h-4 sm:w-5 sm:h-5 text-white animate-bounce" /> : <Mic className="w-4 h-4 sm:w-5 sm:h-5 text-white" />}
+                  {isRecording ? <Mic className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white animate-bounce" /> : <Mic className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white" />}
                   <span>{isRecording ? t('interview.release_to_send') : t('interview.hold_to_speak')}</span>
                 </LiquidButton>
               </div>
@@ -620,14 +692,14 @@ export function Screen3_ConversationalIntake({
                   id="btn-skip"
                   type="button"
                   onClick={onSkip}
-                  className="flex items-center gap-1 px-3 sm:px-5 py-2.5 rounded-full font-bold text-slate-600 hover:bg-slate-100 transition-colors text-xs sm:text-sm cursor-pointer"
+                  className="flex items-center gap-1 px-2.5 xs:px-3 sm:px-5 py-2 xs:py-2.5 rounded-full font-bold text-slate-600 hover:bg-slate-100 transition-colors text-xs sm:text-sm cursor-pointer"
                   title="Skip this question"
                 >
                   <span className="hidden xs:inline">{t('docs.skip')}</span>
-                  <SkipForward className="w-4 h-4" />
+                  <SkipForward className="w-3.5 h-3.5 xs:w-4 xs:h-4" />
                 </LiquidButton>
               ) : (
-                <div className="w-10 sm:w-16" /> /* Placeholder to keep mic centered */
+                <div className="w-8 xs:w-10 sm:w-16" /> /* Placeholder to keep mic centered */
               )}
             </div>
           </div>
