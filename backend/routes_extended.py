@@ -892,10 +892,10 @@ async def generate_and_save_session_pdf(session_id: str, doctor_prescription_ove
 
 @extended_router.get("/api/summary/{session_id}/pdf")
 @extended_router.get("/api/pdf/{session_id}")
-async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool = False):
+async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool = False, download: bool = False):
     import database
     import os
-    from fastapi.responses import FileResponse, RedirectResponse
+    from fastapi.responses import FileResponse, RedirectResponse, Response
     from fastapi import HTTPException
     
     if not database._pool: raise HTTPException(500, "DB error")
@@ -903,7 +903,7 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
         if not regenerate and not force:
             row = await conn.fetchrow("""
                 SELECT cs.summary_id, cs.pdf_file_path, cs.doctor_consultation_notes, cs.generated_at,
-                       ps.doctor_prescription, ps.completed_at, ps.session_status
+                       ps.doctor_prescription, ps.completed_at, ps.session_status, ps.token_id
                 FROM clinical_summaries cs
                 LEFT JOIN patient_sessions ps ON cs.session_id = ps.session_id
                 WHERE cs.session_id = $1 AND cs.pdf_file_path IS NOT NULL
@@ -912,7 +912,7 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
             if not row:
                 row = await conn.fetchrow("""
                     SELECT cs.summary_id, cs.pdf_file_path, cs.doctor_consultation_notes, cs.generated_at,
-                           ps.doctor_prescription, ps.completed_at, ps.session_status
+                           ps.doctor_prescription, ps.completed_at, ps.session_status, ps.token_id
                     FROM clinical_summaries cs
                     LEFT JOIN patient_sessions ps ON cs.session_id = ps.session_id
                     WHERE cs.summary_id = $1
@@ -928,20 +928,65 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
 
             if row and row["pdf_file_path"] and not is_stale:
                 path = row["pdf_file_path"]
-                if path.startswith("http"):
-                    return RedirectResponse(path)
-                elif os.path.exists(path):
-                    return FileResponse(path, media_type="application/pdf", filename=f"{row['summary_id']}.pdf")
+                token_clean = (row.get("token_id") or session_id).replace(" ", "_")
+                filename = f"OPD_Casesheet_{token_clean}.pdf"
+
+                if download:
+                    if path.startswith("http"):
+                        import httpx
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            r = await client.get(path)
+                            return Response(
+                                content=r.content,
+                                media_type="application/pdf",
+                                headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                            )
+                    elif os.path.exists(path):
+                        return FileResponse(
+                            path,
+                            media_type="application/pdf",
+                            filename=filename,
+                            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                        )
+                else:
+                    if path.startswith("http"):
+                        return RedirectResponse(path)
+                    elif os.path.exists(path):
+                        return FileResponse(path, media_type="application/pdf", filename=f"{row['summary_id']}.pdf")
             
     # Generate fresh or regenerate
     try:
         pdf_path, summary_id = await generate_and_save_session_pdf(session_id)
-        if pdf_path.startswith("http"):
-            return RedirectResponse(pdf_path)
-        elif os.path.exists(pdf_path):
-            return FileResponse(pdf_path, media_type="application/pdf", filename=f"{summary_id}.pdf")
+        token_clean = session_id
+        async with database._pool.acquire() as conn:
+            tok = await conn.fetchval("SELECT token_id FROM patient_sessions WHERE session_id = $1", session_id)
+            if tok:
+                token_clean = str(tok).replace(" ", "_")
+        filename = f"OPD_Casesheet_{token_clean}.pdf"
+
+        if download:
+            if pdf_path.startswith("http"):
+                import httpx
+                async with httpx.AsyncClient(timeout=30.0) as client:
+                    r = await client.get(pdf_path)
+                    return Response(
+                        content=r.content,
+                        media_type="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                    )
+            elif os.path.exists(pdf_path):
+                return FileResponse(
+                    pdf_path,
+                    media_type="application/pdf",
+                    filename=filename,
+                    headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+                )
         else:
-            raise HTTPException(500, "Generated PDF could not be located.")
+            if pdf_path.startswith("http"):
+                return RedirectResponse(pdf_path)
+            elif os.path.exists(pdf_path):
+                return FileResponse(pdf_path, media_type="application/pdf", filename=f"{summary_id}.pdf")
+        raise HTTPException(500, "Generated PDF could not be located.")
     except HTTPException:
         raise
     except Exception as e:

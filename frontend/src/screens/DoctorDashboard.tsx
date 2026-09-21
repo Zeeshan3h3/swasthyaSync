@@ -3,7 +3,7 @@ import { LogoutDialog } from '../components/LogoutDialog';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getApiBaseUrl } from '../config';
-import { ArrowLeft, Save, FileText, CheckCircle, Activity, HeartPulse, LogOut, Loader2, User } from 'lucide-react';
+import { ArrowLeft, Save, FileText, CheckCircle, Activity, HeartPulse, LogOut, Loader2, User, Download } from 'lucide-react';
 import { motion } from 'framer-motion';
 
 export const DoctorDashboard: React.FC = () => {
@@ -57,11 +57,48 @@ export const DoctorDashboard: React.FC = () => {
       
       if (res.ok) {
         const data = await res.json().catch(() => ({}));
-        const pdfUrl = data.pdf_url && data.pdf_url.startsWith('http')
+        const downloadUrl = `${getApiBaseUrl()}/api/summary/${session_id}/pdf?download=true&regenerate=true&t=${Date.now()}`;
+        const previewUrl = data.pdf_url && data.pdf_url.startsWith('http')
           ? data.pdf_url
           : `${getApiBaseUrl()}/api/summary/${session_id}/pdf?regenerate=true&t=${Date.now()}`;
-        // Pop open the final signed AI + Doctor prescription PDF with cache buster
-        window.open(pdfUrl, '_blank');
+
+        const rawToken = patient?.token_number || patient?.token_id || session_id || 'Encounter';
+        const filename = `OPD_Casesheet_${String(rawToken).replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
+
+        // 1. Direct file download via blob fetch
+        try {
+          const fileResp = await fetch(downloadUrl);
+          if (fileResp.ok) {
+            const blob = await fileResp.blob();
+            const blobUrl = window.URL.createObjectURL(blob);
+            const downloadLink = document.createElement('a');
+            downloadLink.href = blobUrl;
+            downloadLink.download = filename;
+            document.body.appendChild(downloadLink);
+            downloadLink.click();
+            document.body.removeChild(downloadLink);
+            setTimeout(() => window.URL.revokeObjectURL(blobUrl), 3000);
+          } else {
+            throw new Error('Direct blob fetch returned error');
+          }
+        } catch (fetchErr) {
+          console.warn('Blob download error, falling back to direct anchor download:', fetchErr);
+          const link = document.createElement('a');
+          link.href = downloadUrl;
+          link.download = filename;
+          link.target = '_blank';
+          document.body.appendChild(link);
+          link.click();
+          document.body.removeChild(link);
+        }
+
+        // 2. Also open preview window/tab
+        try {
+          window.open(previewUrl, '_blank');
+        } catch {}
+
+        // Small delay to allow the browser to initiate the download stream before page navigation
+        await new Promise(r => setTimeout(r, 600));
       }
       
       navigate('/doctor'); // back to queue
@@ -214,12 +251,12 @@ export const DoctorDashboard: React.FC = () => {
                 {isSaving ? (
                   <>
                     <Loader2 className="w-4 h-4 sm:w-5 sm:h-5 mr-2 animate-spin" />
-                    Generating & Signing PDF...
+                    Signing & Downloading PDF...
                   </>
                 ) : (
                   <>
-                    <Save className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
-                    Sign & Complete Encounter
+                    <Download className="w-4 h-4 sm:w-5 sm:h-5 mr-2" />
+                    Proceed & Download Signed Casesheet
                   </>
                 )}
               </LiquidButton>
