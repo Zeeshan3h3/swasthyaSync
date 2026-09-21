@@ -57,15 +57,17 @@ def extract_from_response(
     conversation_history: list[dict],
     language: str,
     doctor_custom_instructions: str | None = None,
-) -> dict:
+) -> tuple[dict, list[dict]]:
     """
     Given the patient's latest message and a list of unfilled fields,
-    extract any field values the patient provided.
+    extract:
+      1. field values that map to listed unfilled fields: {field_id: {"value": str, "verbatim": str, "confidence": float}}
+      2. any additional/unprompted clinical findings not in the schema: list[dict]
     
-    Returns: {field_id: {"value": str, "confidence": float}}
+    Returns: (extracted_fields, additional_findings)
     """
     if not patient_message.strip():
-        return {}
+        return {}, []
 
     language_name = LANGUAGE_NAMES.get(language, "English")
 
@@ -87,23 +89,47 @@ def extract_from_response(
 
     system_prompt = f"""You are a medical data extraction engine.
 
-    Given a patient's message (potentially in {language_name}), extract any clinical information that maps to the listed fields.
-    {"The doctor requested you specifically look out for these details during extraction: " + doctor_custom_instructions if doctor_custom_instructions else ""}
+Given a patient's message (potentially in {language_name}), your task is two-fold:
+1. EXTRACT into listed fields: Extract any clinical information that directly answers or maps to the listed unfilled fields.
+2. CAPTURE UNPROMPTED CLINICAL FINDINGS: If the patient volunteered ANY additional clinical symptoms, medical history, medications, allergies, or red-flag warnings that do NOT belong to any of the listed fields, DO NOT IGNORE OR DISCARD THEM! Extract them under "additional_findings".
+{"The doctor requested you specifically look out for these details during extraction: " + doctor_custom_instructions if doctor_custom_instructions else ""}
 
-    RULES:
-    1. Only extract information that the patient CLEARLY stated. Do not infer or guess.
-    2. If the patient's message doesn't contain information for a field, do NOT include that field.
-    3. Values should be concise clinical summaries in English (for structured storage). Also include a "verbatim" key with the patient's approximate wording (translated to English if needed).
-    4. Assign confidence: 0.9+ if clearly stated, 0.7-0.8 if somewhat clear, 0.5-0.6 if ambiguous.
+RULES:
+1. Only extract information that the patient CLEARLY stated. Do not infer or guess.
+2. If the patient's message doesn't contain information for a listed field, do NOT include that field in extracted_fields.
+3. Values should be concise clinical summaries in English (for structured storage). Also include a "verbatim" key with the patient's approximate wording (translated to English if needed).
+4. For "additional_findings", provide:
+   - "id": a clean snake_case slug (e.g. "rash_appearance", "seizure", "vomiting_blood", "headache")
+   - "question_intent": plain-text description of what was reported
+   - "value": clinical summary of the patient's statement
+   - "verbatim": patient's approximate wording
+   - "category": "HPI", "PMH", "DH", or "red_flag_check"
+   - "priority": "critical" if severe/emergency, else "high"
+   - "red_flag": true if dangerous symptom (e.g. chest pain, seizure, blood, high fever), else false
+   - "fork_eligible": true if follow-up clinical clarification is needed
+   - "confidence": 0.9+
+5. Assign confidence: 0.9+ if clearly stated, 0.7-0.8 if somewhat clear, 0.5-0.6 if ambiguous.
 
-    Output ONLY a JSON object:
+Output ONLY a JSON object:
+{{
+  "extracted_fields": {{
+    "field_id": {{"value": "clinical summary", "verbatim": "patient's exact words", "confidence": 0.9}}
+  }},
+  "additional_findings": [
     {{
-      "extracted_fields": {{
-        "field_id": {{"value": "clinical summary", "verbatim": "patient's exact words", "confidence": 0.9}},
-        ...
-      }}
+      "id": "unprompted_symptom_name",
+      "question_intent": "description of finding",
+      "value": "clinical summary",
+      "verbatim": "exact words",
+      "category": "HPI",
+      "priority": "high",
+      "red_flag": false,
+      "fork_eligible": true,
+      "confidence": 0.95
     }}
-    If nothing can be extracted, return: {{"extracted_fields": {{}}}}"""
+  ]
+}}
+If nothing can be extracted, return: {{"extracted_fields": {{}}, "additional_findings": []}}"""
 
     user_prompt = f"""=== FIELDS TO EXTRACT INTO ===
 {fields_text}
@@ -117,11 +143,12 @@ def extract_from_response(
 === ALREADY KNOWN ===
 {filled_summary}
 
-Extract any field values from the patient's latest message."""
+Extract any field values and any unprompted clinical findings from the patient's latest message."""
 
     try:
         result = llm_client.conversation_turn(system_prompt, user_prompt, temperature=0.1)
         extracted = result.get("extracted_fields", {})
+        additional = result.get("additional_findings", [])
         
         # Validate: only accept fields that are in our unfilled list
         valid_field_ids = {f["id"] for f in unfilled_fields}
@@ -130,12 +157,28 @@ Extract any field values from the patient's latest message."""
             if fid in valid_field_ids and isinstance(entry, dict) and entry.get("value"):
                 validated[fid] = entry
         
-        logger.info(f"Extraction: {len(validated)} fields extracted from patient message")
-        return validated
+        # Validate additional unprompted findings
+        validated_additional = []
+        if isinstance(additional, list):
+            for item in additional:
+                if isinstance(item, dict) and item.get("value"):
+                    f_id = item.get("id", "finding").strip().lower()
+                    if not f_id.startswith("unprompted_"):
+                        f_id = f"unprompted_{f_id}"
+                    item["id"] = f_id
+                    item.setdefault("priority", "high")
+                    item.setdefault("category", "HPI")
+                    item.setdefault("red_flag", False)
+                    item.setdefault("fork_eligible", True)
+                    item.setdefault("confidence", 0.95)
+                    validated_additional.append(item)
+        
+        logger.info(f"Extraction: {len(validated)} schema fields + {len(validated_additional)} unprompted findings extracted")
+        return validated, validated_additional
 
     except Exception as e:
         logger.error(f"Extraction failed: {e}")
-        return {}
+        return {}, []
 
 
 # ──────────────────────────────────────────────────────────────────────

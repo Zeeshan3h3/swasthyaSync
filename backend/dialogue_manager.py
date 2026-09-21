@@ -253,6 +253,30 @@ class DialogueManager:
         field_count = len(schema.get("fields", []))
         logger.info(f"Schema generated: {field_count} fields for category '{category}'")
 
+        # ── INITIAL EXTRACTION PASS ──
+        # Extract any symptoms/details already mentioned in the chief complaint!
+        try:
+            initial_extracted, initial_additional = conversation_engine.extract_from_response(
+                patient_message=value,
+                unfilled_fields=schema.get("fields", []),
+                filled_summary="",
+                conversation_history=self.record.conversation_history,
+                language=self.language,
+                doctor_custom_instructions=self.record.doctor_custom_instructions,
+            )
+            for fid, entry in initial_extracted.items():
+                self.record.update_filled_state(
+                    fid,
+                    entry.get("value"),
+                    entry.get("confidence", 0.95),
+                )
+                logger.info(f"⚡ Chief Complaint pre-filled: {fid} = {entry.get('value')}")
+
+            # Inject any additional unprompted clinical findings and fork if warranted
+            self._inject_additional_findings_and_fork(initial_additional, schema)
+        except Exception as e:
+            logger.warning(f"Initial extraction pass on chief complaint failed: {e}")
+
         # Skip SCHEMA_GENERATION state and go directly to DYNAMIC_INTERVIEW
         self.fsm.set_state("DYNAMIC_INTERVIEW")
         self.record.macro_state = "DYNAMIC_INTERVIEW"
@@ -260,6 +284,69 @@ class DialogueManager:
         # Removed db checkpoint here, handled in main.py
 
         return self._build_ui_instruction()
+
+    # ──────────────────────────────────────────────────────────────────
+    # UNPROMPTED CLINICAL FINDINGS & DYNAMIC FORK INJECTOR
+    # ──────────────────────────────────────────────────────────────────
+
+    def _inject_additional_findings_and_fork(self, additional_findings: list[dict], schema: dict):
+        """
+        Dynamically registers any unprompted clinical findings into schema and filled_state
+        so extra information is NEVER lost, and evaluates if sub-questions should be forked.
+        """
+        if not additional_findings:
+            return
+
+        existing_ids = {f["id"] for f in schema.get("fields", [])}
+        for finding in additional_findings:
+            fid = finding.get("id", f"unprompted_{len(existing_ids)}")
+            if not fid.startswith("unprompted_"):
+                fid = f"unprompted_{fid}"
+
+            # 1. Store as filled immediately so it's captured in EMR summary & PDF!
+            val_summary = finding.get("value", "")
+            self.record.update_filled_state(
+                fid,
+                val_summary,
+                finding.get("confidence", 0.95),
+            )
+
+            # 2. Add to schema fields if not already present
+            if fid not in existing_ids:
+                new_field = {
+                    "id": fid,
+                    "question_intent": finding.get("question_intent", fid.replace("_", " ")),
+                    "type": "string",
+                    "priority": finding.get("priority", "high"),
+                    "red_flag": finding.get("red_flag", False),
+                    "fork_eligible": finding.get("fork_eligible", True),
+                    "category": finding.get("category", "HPI"),
+                    "conditional_on": None,
+                }
+                schema.setdefault("fields", []).append(new_field)
+                existing_ids.add(fid)
+                logger.info(f"➕ Injected new unprompted field into schema: '{fid}' = {val_summary}")
+
+                # 3. Dynamic fork check: if fork_eligible or red flag, generate follow-up questions!
+                if new_field.get("fork_eligible", False) or new_field.get("red_flag", False):
+                    fork_result = conversation_engine.check_and_generate_fork_questions(
+                        parent_field=new_field,
+                        patient_answer=str(val_summary),
+                        chief_complaint=self.record.chief_complaint.value if self.record.chief_complaint else "",
+                        language=self.language,
+                        doctor_custom_instructions=self.record.doctor_custom_instructions,
+                    )
+                    if fork_result:
+                        for sub_field in fork_result:
+                            sub_id = sub_field["id"]
+                            if sub_id not in existing_ids:
+                                if new_field.get("red_flag"):
+                                    sub_field["priority"] = "critical"
+                                    sub_field["red_flag"] = True
+                                schema["fields"].append(sub_field)
+                                self.record.filled_state[sub_id] = {"value": None, "confidence": 0.0}
+                                existing_ids.add(sub_id)
+                        logger.info(f"🔀 Fork triggered on unprompted finding '{fid}': injected {len(fork_result)} sub-questions")
 
     # ──────────────────────────────────────────────────────────────────
     # DYNAMIC INTERVIEW HANDLER (Stage 2 loop)
@@ -286,7 +373,7 @@ class DialogueManager:
             if not (self.record.filled_state.get(f["id"], {}).get("value"))
         ]
 
-        extracted = conversation_engine.extract_from_response(
+        extracted, additional_findings = conversation_engine.extract_from_response(
             patient_message=value,
             unfilled_fields=unfilled_fields,
             filled_summary=self.record.get_filled_summary(),
@@ -303,6 +390,9 @@ class DialogueManager:
                 entry.get("confidence", 0.8),
             )
             logger.debug(f"Filled: {fid} = {entry.get('value')}")
+
+        # 3.1 INJECT ADDITIONAL UNPROMPTED FINDINGS & FORK DYNAMICALLY
+        self._inject_additional_findings_and_fork(additional_findings, schema)
 
         # 3.5 FORK CHECK: Did we just fill a fork_eligible field with a significant answer?
         for fid, entry in extracted.items():

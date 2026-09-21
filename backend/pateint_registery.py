@@ -6,10 +6,10 @@ The primary test user (Ramesh Kumar) is pinned to mobile: 9088260058.
 
 MOCK_ABHA_REGISTRY = {
     # --- HIGHLIGHTED TEST PROFILE (PINNED NUMBER) ---
-    "ramesh.kumar@abdm": {
+    "ramesh.verma@abdm": {
         "healthIdNumber": "91-1001-2001-3001",
-        "healthId": "ramesh.kumar@abdm",
-        "name": "Ramesh Kumar",
+        "healthId": "ramesh.verma@abdm",
+        "name": "Ramesh Verma",
         "gender": "M",
         "yearOfBirth": "1988",
         "monthOfBirth": "06",
@@ -19,7 +19,8 @@ MOCK_ABHA_REGISTRY = {
         "stateName": "West Bengal",
         "pincode": "700091",
         "mobile": "9088260058",  # <--- PINNED TEST NUMBER
-        "profilePhoto": ""
+        "profilePhoto": "",
+        "bloodGroup": "O-"
     },
     
     # --- WEST BENGAL ---
@@ -36,7 +37,8 @@ MOCK_ABHA_REGISTRY = {
         "stateName": "West Bengal",
         "pincode": "700032",
         "mobile": "8420744956",  # <--- INJECTED NUMBER 2
-        "profilePhoto": ""
+        "profilePhoto": "",
+        "bloodGroup":"B+"
     },
     "subhash.bose@abdm": {
         "healthIdNumber": "91-1001-2001-3003",

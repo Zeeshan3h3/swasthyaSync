@@ -17,11 +17,26 @@ import type { OrbState } from '../components/AbstractOrb';
 import type { UIInstruction } from '../hooks/useConversation';
 import { useSarvamSTT } from '../hooks/useSarvamSTT';
 import { useSarvamTTS } from '../hooks/useSarvamTTS';
+import { useWordTyping } from '../hooks/useWordTyping';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTranslation } from '../hooks/useTranslation';
 import { ClinicalSummaryBadge } from '../components/ClinicalSummaryBadge';
 import { getMedicalOptionVisual } from '../utils/medicalIcons';
 import { AyushChecklistModal, ALL_25_AYUSH_CHECKS, parseSummaryMap, getAyushCheckValue } from '../components/AyushChecklistModal';
+
+const LANGUAGE_DISPLAY: Record<string, { flag: string; name: string }> = {
+  'hi-IN': { flag: '🇮🇳', name: 'हिंदी (Hindi)' },
+  'ta-IN': { flag: '🇮🇳', name: 'தமிழ் (Tamil)' },
+  'te-IN': { flag: '🇮🇳', name: 'తెలుగు (Telugu)' },
+  'kn-IN': { flag: '🇮🇳', name: 'ಕನ್ನಡ (Kannada)' },
+  'bn-IN': { flag: '🇮🇳', name: 'বাংলা (Bengali)' },
+  'mr-IN': { flag: '🇮🇳', name: 'मराठी (Marathi)' },
+  'gu-IN': { flag: '🇮🇳', name: 'ગુજરાતી (Gujarati)' },
+  'ml-IN': { flag: '🇮🇳', name: 'മലയാളം (Malayalam)' },
+  'pa-IN': { flag: '🇮🇳', name: 'ਪੰਜਾਬੀ (Punjabi)' },
+  'or-IN': { flag: '🇮🇳', name: 'ଓଡ଼ିଆ (Odia)' },
+  'en-IN': { flag: '🇮🇳', name: 'English (IN)' },
+};
 
 interface Props {
   ui: UIInstruction;
@@ -70,16 +85,41 @@ export function Screen3_ConversationalIntake({
   // Track the last prompt to avoid re-speaking the same one
   const lastSpokenPromptRef = useRef<string>('');
 
-  // STT with direct callback
+  // Indic word-by-word typing effect for Sarvam STT speech input
+  const {
+    isTyping: isTypingVoice,
+    displayedText: displayedVoiceText,
+    activeLanguage: typingLanguage,
+    startTyping: startVoiceTyping,
+    cancelTyping: cancelVoiceTyping,
+  } = useWordTyping({
+    baseWordDelayMs: 65,
+    punctuationDelayMs: 90,
+    maxTotalDurationMs: 1300,
+    completionPauseMs: 400,
+  });
+
+  // STT callback: starts typing in the exact native Indic script
   const handleSTTResult = useCallback((result: { transcript: string; language_code: string }) => {
     if (result.transcript) {
-      console.log('[Screen3] STT result received:', result.transcript);
-      onVoice(result.transcript, result.language_code);
+      console.log('[Screen3] STT transcript received in native script:', result.transcript, '| lang:', result.language_code);
+      startVoiceTyping(result.transcript, result.language_code, () => {
+        console.log('[Screen3] Word typing complete — sending voice input to conversational intake');
+        onVoice(result.transcript, result.language_code);
+        setInputText('');
+      });
     }
-  }, [onVoice]);
+  }, [onVoice, startVoiceTyping]);
 
-  const { isRecording, startRecording, stopRecording, error: sttError, audioLevel } =
+  const { isRecording, isTranscribing, startRecording, stopRecording, error: sttError, audioLevel } =
     useSarvamSTT(ui.language || 'hi-IN', handleSTTResult);
+
+  // Mirror typing effect to quick text input bar in real time
+  useEffect(() => {
+    if (isTypingVoice) {
+      setInputText(displayedVoiceText);
+    }
+  }, [isTypingVoice, displayedVoiceText]);
 
   // Auto-TTS: speak the prompt whenever a new one arrives
   useEffect(() => {
@@ -94,16 +134,17 @@ export function Screen3_ConversationalIntake({
     }
   }, [ui.prompt, ui.ack, ui.language, isProcessing, speak]);
 
-  // Auto-scroll chat
+  // Auto-scroll chat on updates, speech typing, or recording
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [ui.conversation_history]);
+  }, [ui.conversation_history, displayedVoiceText, isRecording, isTranscribing]);
 
   const handleMicPress = useCallback(async (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
     stopTTS();
+    cancelVoiceTyping();
     await startRecording(e);
-  }, [startRecording, stopTTS]);
+  }, [startRecording, stopTTS, cancelVoiceTyping]);
 
   const handleMicRelease = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
@@ -112,20 +153,28 @@ export function Screen3_ConversationalIntake({
 
   const handleOptionTap = useCallback((opt: { label: string; value?: string }) => {
     stopTTS();
+    cancelVoiceTyping();
     const backendValue = opt.value || opt.label;
     onTap(backendValue);
-  }, [onTap, stopTTS]);
+  }, [onTap, stopTTS, cancelVoiceTyping]);
 
   const handleTextSubmit = useCallback((e: React.FormEvent) => {
     e.preventDefault();
     if (!inputText.trim()) return;
     stopTTS();
+    cancelVoiceTyping();
     onVoice(inputText.trim(), ui.language || 'en-IN');
     setInputText('');
-  }, [inputText, stopTTS, onVoice, ui.language]);
+  }, [inputText, stopTTS, onVoice, ui.language, cancelVoiceTyping]);
 
   const progress = ui.progress;
-  const effectiveOrbState: OrbState = isRecording ? 'listening' : isSpeaking ? 'speaking' : orbState;
+  const effectiveOrbState: OrbState = isRecording
+    ? 'listening'
+    : isTranscribing || isTypingVoice
+    ? 'processing'
+    : isSpeaking
+    ? 'speaking'
+    : orbState;
   const micRingOpacity = isRecording ? Math.min(audioLevel * 2, 1) : 0;
 
   const renderPanelContent = () => (
@@ -237,6 +286,72 @@ export function Screen3_ConversationalIntake({
                 <span>Say hello or speak your symptom to start!</span>
               </div>
             )}
+
+            {/* LIVE VOICE INPUT STREAMING & TYPING BUBBLE */}
+            <AnimatePresence>
+              {isRecording && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="flex flex-col items-end"
+                >
+                  <span className="text-[11px] font-bold mb-1 text-red-500 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>{t('interview.you')} (Listening...)</span>
+                    <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                  </span>
+                  <div className="px-3.5 py-2.5 rounded-2xl rounded-tr-xs bg-red-50/90 border border-red-200 text-red-700 text-xs sm:text-sm font-semibold flex items-center gap-2.5 shadow-card">
+                    <div className="flex items-center gap-1">
+                      <span className="w-1 bg-red-500 rounded-full transition-all duration-75" style={{ height: `${8 + Math.round(audioLevel * 16)}px` }} />
+                      <span className="w-1 bg-red-600 rounded-full transition-all duration-75" style={{ height: `${12 + Math.round(audioLevel * 20)}px` }} />
+                      <span className="w-1 bg-red-500 rounded-full transition-all duration-75" style={{ height: `${6 + Math.round(audioLevel * 12)}px` }} />
+                    </div>
+                    <span>Listening to your speech... / सुन रहे हैं...</span>
+                  </div>
+                </motion.div>
+              )}
+
+              {isTranscribing && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="flex flex-col items-end"
+                >
+                  <span className="text-[11px] font-bold mb-1 text-amber-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <span>{t('interview.you')}</span>
+                    <Loader2 className="w-3 h-3 animate-spin text-amber-600" />
+                  </span>
+                  <div className="px-3.5 py-2.5 rounded-2xl rounded-tr-xs bg-amber-50 border border-amber-200 text-amber-900 text-xs sm:text-sm font-semibold flex items-center gap-2 shadow-card">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-amber-600" />
+                    <span>Analyzing voice with Sarvam AI...</span>
+                  </div>
+                </motion.div>
+              )}
+
+              {isTypingVoice && (
+                <motion.div
+                  initial={{ opacity: 0, y: 8, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="flex flex-col items-end"
+                >
+                  <span className="text-[11px] font-bold mb-1 text-blue-600 uppercase tracking-wider flex items-center gap-1.5">
+                    <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full text-[9px] font-extrabold tracking-wider border border-blue-200 flex items-center gap-1">
+                      <Sparkles className="w-2.5 h-2.5 text-blue-600" />
+                      <span>{LANGUAGE_DISPLAY[typingLanguage]?.name || 'NATIVE VOICE'}</span>
+                    </span>
+                    <span>{t('interview.you')}</span>
+                    <User className="w-3 h-3 text-blue-500" />
+                  </span>
+                  <div className="px-3.5 py-2.5 rounded-2xl rounded-tr-xs bg-gradient-to-r from-blue-600 to-indigo-600 text-white max-w-[92%] text-sm sm:text-base font-medium leading-relaxed shadow-card shadow-blue-600/25 border border-blue-400/40">
+                    <span className="break-words font-sans">{displayedVoiceText}</span>
+                    <span className="inline-block w-2 h-4 ml-1.5 bg-white animate-pulse align-middle rounded-xs" />
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
             <div ref={chatEndRef} className="h-2" />
           </div>
         </>
@@ -526,6 +641,30 @@ export function Screen3_ConversationalIntake({
                   <span>LISTENING</span>
                 </motion.div>
               )}
+              {isTranscribing && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 4, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 2, scale: 0.9 }}
+                  transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-[11px] font-bold text-amber-700 bg-amber-50 px-3 py-0.5 rounded-full border border-amber-200 shadow-card whitespace-nowrap"
+                >
+                  <Loader2 className="w-3 h-3 animate-spin text-amber-600" />
+                  <span>ANALYZING VOICE</span>
+                </motion.div>
+              )}
+              {isTypingVoice && (
+                <motion.div 
+                  initial={{ opacity: 0, y: 4, scale: 0.9 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 2, scale: 0.9 }}
+                  transition={{ duration: 0.15, ease: [0.16, 1, 0.3, 1] }}
+                  className="absolute -bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-1.5 text-[11px] font-bold text-blue-700 bg-blue-50 px-3 py-0.5 rounded-full border border-blue-200 shadow-card whitespace-nowrap max-w-[260px] truncate"
+                >
+                  <span className="w-2 h-2 bg-blue-600 rounded-full animate-ping" />
+                  <span>TYPING VOICE INPUT</span>
+                </motion.div>
+              )}
             </AnimatePresence>
           </div>
 
@@ -578,7 +717,7 @@ export function Screen3_ConversationalIntake({
                     key={idx}
                     id={`option-${idx}`}
                     onClick={() => handleOptionTap(opt as any)}
-                    disabled={isProcessing || isRecording}
+                    disabled={isProcessing || isRecording || isTranscribing || isTypingVoice}
                     className={`flex items-center gap-2.5 xs:gap-3.5 px-3.5 py-2.5 xs:px-5 xs:py-3 sm:px-6 sm:py-3.5 bg-white border-2 ${visual.badgeBorder} rounded-2xl hover:shadow-card-hover active:scale-[0.97] transition-[transform,box-shadow,border-color,background-color] duration-150 text-left shadow-card border-b-4 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer min-h-[50px] xs:min-h-[56px] min-w-[135px] xs:min-w-[160px] sm:min-w-[210px] flex-1 max-w-[340px]`}
                   >
                     <span className="text-xl xs:text-2xl sm:text-3xl shrink-0 select-none leading-none">
@@ -608,20 +747,22 @@ export function Screen3_ConversationalIntake({
           
           {/* Quick text input form */}
           <form onSubmit={handleTextSubmit} className="flex w-full gap-2 relative">
-            <div className="w-full flex items-center bg-white border border-slate-200 rounded-full pl-4 pr-12 xs:pl-5 xs:pr-14 py-2 xs:py-2.5 shadow-card focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:shadow-card-hover transition-[border-color,box-shadow] duration-200">
+            <div className={`w-full flex items-center bg-white border ${
+              isTypingVoice ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-blue-500/10' : 'border-slate-200'
+            } rounded-full pl-4 pr-12 xs:pl-5 xs:pr-14 py-2 xs:py-2.5 shadow-card focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:shadow-card-hover transition-[border-color,box-shadow] duration-200`}>
               <input 
                 type="text" 
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                disabled={isProcessing || isRecording}
-                placeholder={t('interview.type_response')}
+                disabled={isProcessing || isRecording || isTranscribing || isTypingVoice}
+                placeholder={isTypingVoice ? "Typing recognized speech..." : t('interview.type_response')}
                 className="w-full bg-transparent border-none text-xs xs:text-sm sm:text-base font-semibold text-slate-800 focus:outline-none disabled:opacity-50 placeholder:text-slate-400"
               />
             </div>
             <LiquidButton 
               type="submit" 
               aria-label="Send message"
-              disabled={isProcessing || isRecording || !inputText.trim()}
+              disabled={isProcessing || isRecording || isTranscribing || isTypingVoice || !inputText.trim()}
               className="absolute right-1 top-1 bottom-1 aspect-square flex items-center justify-center bg-blue-600 text-white rounded-full hover:bg-blue-700 disabled:opacity-40 disabled:bg-slate-200 disabled:text-slate-400 transition-[background-color,transform] duration-150 active:scale-[0.97] cursor-pointer shadow-xs"
             >
               <Send className="w-3.5 h-3.5 xs:w-4 xs:h-4" />
@@ -672,15 +813,36 @@ export function Screen3_ConversationalIntake({
                   onTouchStart={handleMicPress}
                   onTouchEnd={handleMicRelease}
                   onTouchCancel={handleMicRelease}
-                  disabled={isProcessing}
+                  disabled={isProcessing || isTranscribing || isTypingVoice}
                   className={`relative flex items-center justify-center gap-1.5 xs:gap-2 px-3.5 xs:px-5 sm:px-8 py-2 xs:py-2.5 sm:py-3 rounded-full font-extrabold text-white transition-[transform,box-shadow,background-color] duration-150 active:scale-[0.97] shadow-card-hover text-xs sm:text-base ${
                     isRecording
                       ? 'bg-red-600 shadow-red-600/40 scale-102 animate-pulse'
+                      : isTranscribing || isTypingVoice
+                      ? 'bg-blue-600/90 shadow-blue-600/30'
                       : 'bg-gradient-to-r from-blue-600 to-indigo-600 shadow-blue-600/25 hover:from-blue-700 hover:to-indigo-700'
                   } disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer shrink-0 min-w-[130px] xs:min-w-[150px] sm:min-w-[190px]`}
                 >
-                  {isRecording ? <Mic className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white animate-bounce" /> : <Mic className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white" />}
-                  <span>{isRecording ? t('interview.release_to_send') : t('interview.hold_to_speak')}</span>
+                  {isRecording ? (
+                    <>
+                      <Mic className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white animate-bounce" />
+                      <span>{t('interview.release_to_send')}</span>
+                    </>
+                  ) : isTranscribing ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white animate-spin" />
+                      <span>Analyzing...</span>
+                    </>
+                  ) : isTypingVoice ? (
+                    <>
+                      <Sparkles className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white animate-pulse" />
+                      <span>Transcribing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Mic className="w-3.5 h-3.5 xs:w-4 xs:h-4 sm:w-5 sm:h-5 text-white" />
+                      <span>{t('interview.hold_to_speak')}</span>
+                    </>
+                  )}
                 </LiquidButton>
               </div>
             </div>
