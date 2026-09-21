@@ -223,25 +223,32 @@ async def save_uploaded_document(session_id: str, file_path: str, document_type:
     return doc_id
 
 async def save_clinical_summary(session_id: str, small_summary: str, full_detailed_summary: dict, 
-                          critical_highlights: list, contradictions_found: list, pdf_file_path: str) -> str:
-    """Uses INSERT ON CONFLICT on clinical_summaries to store generated AI narratives, PDF paths, and contradiction audits."""
+                          critical_highlights: list, contradictions_found: list, pdf_file_path: str,
+                          doctor_consultation_notes: str = None, doctor_id: str = None) -> str:
+    """Uses INSERT ON CONFLICT on clinical_summaries to store generated AI narratives, PDF paths, doctor notes, and contradiction audits."""
     summary_id = f"sum_{uuid.uuid4().hex[:8]}"
     if not _pool: return summary_id
     async with _pool.acquire() as conn:
         await conn.execute("""
             INSERT INTO clinical_summaries 
-            (summary_id, session_id, small_summary, full_detailed_summary, critical_highlights, contradictions_found, pdf_file_path)
-            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7)
+            (summary_id, session_id, small_summary, full_detailed_summary, critical_highlights, contradictions_found, pdf_file_path, doctor_consultation_notes, doctor_id, doctor_signed_at, generated_at)
+            VALUES ($1, $2, $3, $4::jsonb, $5::jsonb, $6::jsonb, $7, $8::text, $9::text, CASE WHEN $8::text IS NOT NULL THEN CURRENT_TIMESTAMP ELSE NULL END, CURRENT_TIMESTAMP)
             ON CONFLICT (session_id) DO UPDATE SET
                 small_summary = EXCLUDED.small_summary,
                 full_detailed_summary = EXCLUDED.full_detailed_summary,
                 critical_highlights = EXCLUDED.critical_highlights,
                 contradictions_found = EXCLUDED.contradictions_found,
-                pdf_file_path = EXCLUDED.pdf_file_path
+                pdf_file_path = EXCLUDED.pdf_file_path,
+                doctor_consultation_notes = COALESCE(EXCLUDED.doctor_consultation_notes, clinical_summaries.doctor_consultation_notes),
+                doctor_id = COALESCE(EXCLUDED.doctor_id, clinical_summaries.doctor_id),
+                doctor_signed_at = CASE WHEN EXCLUDED.doctor_consultation_notes IS NOT NULL THEN CURRENT_TIMESTAMP ELSE clinical_summaries.doctor_signed_at END,
+                generated_at = CURRENT_TIMESTAMP
         """, summary_id, session_id, small_summary, json.dumps(full_detailed_summary),
             json.dumps(critical_highlights or []), 
             json.dumps(contradictions_found or []),
-            pdf_file_path
+            pdf_file_path,
+            doctor_consultation_notes,
+            doctor_id
         )
     return summary_id
 

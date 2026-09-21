@@ -1123,8 +1123,14 @@
 
                 <div style="padding: 6px 8px;">
                     {% if doctor_prescription %}
-                        <div style="font-size:10.5px; line-height:1.5; color:var(--ink-primary); white-space: pre-line; margin-bottom: 6px;">
-                            {{ doctor_prescription }}
+                        <div class="doctor-prescription-box" style="background: #f8fafc; border: 1px solid #cbd5e1; border-left: 3.5px solid #2563eb; border-radius: 4px; padding: 7px 10px; margin-bottom: 7px;">
+                            <div style="font-size: 8.5px; font-weight: 800; text-transform: uppercase; color: #1e40af; letter-spacing: 0.04em; margin-bottom: 3px; display: flex; align-items: center; justify-content: space-between;">
+                                <span>&#10003; Attending Physician Consultation Orders &amp; Rx</span>
+                                <span style="color:#64748b; font-weight:600;">Status: Formally Signed</span>
+                            </div>
+                            <div style="font-size: 10.5px; line-height: 1.55; color: #0f172a; font-weight: 600; white-space: pre-line;">
+                                {{ doctor_prescription }}
+                            </div>
                         </div>
                     {% endif %}
 

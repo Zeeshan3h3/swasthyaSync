@@ -411,32 +411,26 @@ async def generate_doctor_summary(session_id: str, staff: dict = Depends(_requir
 
 from fastapi.responses import FileResponse
 
-@extended_router.get("/api/summary/{session_id}/pdf")
-async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool = False):
+async def generate_and_save_session_pdf(session_id: str, doctor_prescription_override: str = None) -> tuple[str, str]:
+    """
+    Generates the complete, authoritative OPD casesheet PDF for session_id.
+    Guarantees that attending physician notes/prescriptions are rendered.
+    Uploads to Supabase storage (or saves locally).
+    Persists updated pdf_file_path, doctor_consultation_notes, and detailed summary in clinical_summaries.
+    Returns (pdf_path, summary_id).
+    """
     import database
     import os
     import json
     import uuid
+    import re
     from datetime import datetime
-    from fastapi.responses import FileResponse
     from fastapi import HTTPException
     
-    if not database._pool: raise HTTPException(500, "DB error")
+    if not database._pool:
+        raise HTTPException(500, "Database pool not initialized")
+        
     async with database._pool.acquire() as conn:
-        if not regenerate and not force:
-            row = await conn.fetchrow("SELECT summary_id, pdf_file_path FROM clinical_summaries WHERE session_id = $1 AND pdf_file_path IS NOT NULL ORDER BY generated_at DESC LIMIT 1", session_id)
-            if not row:
-                row = await conn.fetchrow("SELECT summary_id, pdf_file_path FROM clinical_summaries WHERE summary_id = $1", session_id)
-                
-            if row and row["pdf_file_path"]:
-                path = row["pdf_file_path"]
-                if path.startswith("http"):
-                    from fastapi.responses import RedirectResponse
-                    return RedirectResponse(path)
-                elif os.path.exists(path):
-                    return FileResponse(path, media_type="application/pdf", filename=f"{row['summary_id']}.pdf")
-            
-        # ── On-demand PDF generation fallback / regeneration ──
         try:
             from main import sessions
             dm = sessions.get(session_id)
@@ -444,7 +438,6 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
             dm = None
         
         def _parse_vitals_to_dict(raw_vitals_str: str = "", weight_val = None, height_val = None, filled_state: dict = None) -> dict:
-            import re
             res = {
                 "bp": "",
                 "hr": "",
@@ -459,17 +452,17 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
             
             text = str(raw_vitals_str or "").strip()
             
-            # 1. Parse Blood Pressure (e.g., 155/95, 120/80)
+            # 1. Parse Blood Pressure
             bp_match = re.search(r'(\b\d{2,3}\s*/\s*\d{2,3}\b)', text)
             if bp_match:
                 res["bp"] = bp_match.group(1).replace(" ", "")
             
-            # 2. Parse Heart Rate / Pulse (e.g., HR 104, Pulse 78, HR: 82 bpm)
+            # 2. Parse Heart Rate / Pulse
             hr_match = re.search(r'(?:HR|Heart\s*Rate|Pulse|PR)[\s:]*(\d{2,3})', text, re.IGNORECASE)
             if hr_match:
                 res["hr"] = hr_match.group(1)
             
-            # 3. Parse SpO2 (e.g., SpO2 94%, SpO2: 98%, 98% SpO2)
+            # 3. Parse SpO2
             spo2_match = re.search(r'(?:SpO2|Oxygen|O2)[\s:]*(\d{2,3})\s*%?', text, re.IGNORECASE)
             if not spo2_match:
                 spo2_match = re.search(r'(\d{2,3})\s*%\s*(?:SpO2)?', text, re.IGNORECASE)
@@ -478,14 +471,14 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
                 if 50 <= val <= 100:
                     res["spo2"] = str(val)
                     
-            # 4. Parse Temperature (e.g., Temp 102.4F, 98.6 F, Temp: 99)
+            # 4. Parse Temperature
             temp_match = re.search(r'(?:Temp|Temperature)[\s:]*([\d\.]+)\s*(?:F|C|\xb0F|\xb0C)?', text, re.IGNORECASE)
             if temp_match:
                 res["temp"] = temp_match.group(1)
             else:
                 res["temp"] = "98.4"
 
-            # 5. Respiratory Rate (e.g. RR 18, Resp Rate 16)
+            # 5. Respiratory Rate
             rr_match = re.search(r'(?:RR|Resp|Respiratory\s*Rate)[\s:]*(\d{1,2})', text, re.IGNORECASE)
             if rr_match:
                 res["resp_rate"] = rr_match.group(1)
@@ -575,7 +568,7 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
         p_sess = await conn.fetchrow("""
             SELECT ps.chief_complaint, ps.patient_id, ps.doctor_prescription, ps.priority_flag,
                    ps.priority_reason, ps.token_id, ps.filled_state_json, ps.department, ps.created_at,
-                   ps.doctor_id,
+                   ps.doctor_id, ps.session_status, ps.completed_at,
                    d.full_name as doctor_name, d.license_number as doctor_license, d.room_number,
                    dept.name as dept_name
             FROM patient_sessions ps
@@ -586,7 +579,7 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
         q_row = p_sess
         
         if not p_sess:
-            raise HTTPException(404, "Session not found")
+            raise HTTPException(404, f"Session {session_id} not found")
             
         p_info = await conn.fetchrow("SELECT full_name, age, gender, abha_id, phone_number, address, weight, height, vitals FROM patients WHERE patient_id = $1", p_sess["patient_id"])
 
@@ -596,9 +589,10 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
         doctor_license = p_sess.get("doctor_license")
         room_no = p_sess.get("room_number")
 
+        doc_row = None
         if not doctor_name:
             doc_row = await conn.fetchrow("""
-                SELECT d.full_name, d.license_number, d.room_number
+                SELECT d.doctor_id, d.full_name, d.license_number, d.room_number
                 FROM doctors d
                 LEFT JOIN departments dept ON d.dept_id = dept.dept_id
                 WHERE LOWER(dept.name) = LOWER($1) AND (d.status = 'Active' OR d.status IS NULL)
@@ -618,6 +612,23 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
         if not doctor_license:
             doctor_license = "MCI-2018-9821"
 
+        # Safely resolve valid doctor_id to avoid FK constraint violation
+        valid_doc_id = None
+        target_doc_id = p_sess.get("doctor_id")
+        if target_doc_id:
+            exists = await conn.fetchval("SELECT 1 FROM doctors WHERE doctor_id = $1", str(target_doc_id))
+            if exists:
+                valid_doc_id = str(target_doc_id)
+        if not valid_doc_id and doc_row and doc_row.get("doctor_id"):
+            valid_doc_id = str(doc_row["doctor_id"])
+        if not valid_doc_id:
+            valid_doc_id = "doc_1"
+
+        # Resolve effective doctor prescription
+        effective_doc_rx = doctor_prescription_override
+        if effective_doc_rx is None:
+            effective_doc_rx = p_sess["doctor_prescription"] if p_sess and "doctor_prescription" in p_sess.keys() and p_sess["doctor_prescription"] else ""
+
         # IST Timezone Resolution
         try:
             from zoneinfo import ZoneInfo
@@ -636,256 +647,306 @@ async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool
             from datetime import datetime, timezone
             ist_time = datetime.now(timezone.utc).astimezone(ist).strftime("%d/%m/%Y %I:%M %p")
         
-        try:
-            from pdf_generator import generate_summary_pdf
-            from llm_client import generate_clinical_summary
-            
-            extracted_medications = []
-            extracted_labs = []
-            uploaded_images = []
-            doc_extractions_list = []
-            
-            # ── Helper: extract earliest clinical date from OCR result ──
-            def _extract_earliest_date(ocr_data: dict) -> str:
-                NO_DATE = "9999-12-31"
-                try:
-                    cs = ocr_data.get("consolidated_summary", {})
-                    if isinstance(cs, str):
-                        cs = json.loads(cs)
-                    dates = cs.get("document_dates", [])
-                    valid = [d.get("date", "") for d in dates if d.get("date")]
-                    if valid:
-                        valid.sort()
-                        return valid[0]  # earliest date
-                except Exception:
-                    pass
-                return NO_DATE
+        from pdf_generator import generate_summary_pdf
+        from llm_client import generate_clinical_summary
+        
+        extracted_medications = []
+        extracted_labs = []
+        uploaded_images = []
+        doc_extractions_list = []
+        
+        # ── Helper: extract earliest clinical date from OCR result ──
+        def _extract_earliest_date(ocr_data: dict) -> str:
+            NO_DATE = "9999-12-31"
+            try:
+                cs = ocr_data.get("consolidated_summary", {})
+                if isinstance(cs, str):
+                    cs = json.loads(cs)
+                dates = cs.get("document_dates", [])
+                valid = [d.get("date", "") for d in dates if d.get("date")]
+                if valid:
+                    valid.sort()
+                    return valid[0]
+            except Exception:
+                pass
+            return NO_DATE
 
+        _image_date_pairs = []
+        if dm:
+            filled_state_json = dm.record.filled_state
+            doc_extractions_list = [ext.model_dump() for ext in dm.record.document_extractions]
+            
             _image_date_pairs = []
-            if dm:
-                filled_state_json = dm.record.filled_state
-                doc_extractions_list = [ext.model_dump() for ext in dm.record.document_extractions]
-                
-                _image_date_pairs = []
-                for doc in dm.record.document_extractions:
-                    if not getattr(doc, 'ocr_path', None):
-                        continue
-                    paths = [p.strip() for p in doc.ocr_path.split(",") if p.strip()]
-                    ocr_data = doc.entities[0] if doc.entities else {}
-                    earliest = _extract_earliest_date(ocr_data)
-                    for p in paths:
-                        _image_date_pairs.append((earliest, p))
-                
-                _image_date_pairs.sort(key=lambda x: x[0])
-                uploaded_images = [p for _, p in _image_date_pairs]
-            else:
-                filled_state_json = json.loads(p_sess["filled_state_json"]) if p_sess.get("filled_state_json") else {}
-                db_docs = await conn.fetch("SELECT file_path, ocr_raw_json FROM uploaded_documents WHERE session_id = $1", session_id)
-                
-                _image_date_pairs = []
-                for doc in db_docs:
-                    if doc["file_path"]:
-                        paths = [p.strip() for p in doc["file_path"].split(",") if p.strip()]
-                    else:
-                        paths = []
-                    ocr_data = json.loads(doc["ocr_raw_json"]) if doc["ocr_raw_json"] else {}
-                    earliest = _extract_earliest_date(ocr_data)
-                    if ocr_data:
-                        doc_extractions_list.append(ocr_data)
-                    for p in paths:
-                        _image_date_pairs.append((earliest, p))
-                
-                _image_date_pairs.sort(key=lambda x: x[0])
-                uploaded_images = [p for _, p in _image_date_pairs]
-                        
-            for ext in doc_extractions_list:
-                if "medications" in ext:
-                    for med in ext["medications"]:
-                        extracted_medications.append({
-                            "name": med.get("drug_name", ""),
-                            "dosage": med.get("dosage", ""),
-                            "frequency": med.get("frequency", "")
-                        })
-                if "lab_values" in ext:
-                    for lab in ext["lab_values"]:
-                        extracted_labs.append({
-                            "parameter": lab.get("test_name", ""),
-                            "value": f"{lab.get('value', '')} {lab.get('unit', '')}".strip(),
-                            "is_abnormal": lab.get("is_abnormal", False)
-                        })
-
-            if not filled_state_json and not doc_extractions_list:
-                ai_summary = {
-                    "clinical_narrative": p_sess["chief_complaint"] if p_sess else "No complaint recorded",
-                    "critical_highlights": []
-                }
-            else:
-                ai_summary = generate_clinical_summary(filled_state_json, doc_extractions_list)
-
-            ocr_data = {
-                "extracted_medications": extracted_medications,
-                "extracted_labs": extracted_labs
-            }
+            for doc in dm.record.document_extractions:
+                if not getattr(doc, 'ocr_path', None):
+                    continue
+                paths = [p.strip() for p in doc.ocr_path.split(",") if p.strip()]
+                ocr_data = doc.entities[0] if doc.entities else {}
+                earliest = _extract_earliest_date(ocr_data)
+                for p in paths:
+                    _image_date_pairs.append((earliest, p))
             
-            previous_history = None
-            prev_sess = await conn.fetchrow("SELECT session_id FROM patient_sessions WHERE patient_id = $1 AND session_id != $2 ORDER BY created_at DESC LIMIT 1", p_sess["patient_id"], session_id)
-            if prev_sess:
-                old_session_id = prev_sess["session_id"]
-                old_sum = await conn.fetchrow("SELECT full_detailed_summary, pdf_file_path FROM clinical_summaries WHERE session_id = $1 ORDER BY generated_at DESC LIMIT 1", old_session_id)
-                if old_sum:
-                    previous_history = json.loads(old_sum["full_detailed_summary"]) if old_sum["full_detailed_summary"] else None
-                    if previous_history and old_sum["pdf_file_path"]:
-                        previous_history["pdf_file_path"] = old_sum["pdf_file_path"]
-                        
-            # Get Logo B64 securely
-            logo_b64 = ""
-            try:
-                import base64
-                for cand_path in [
-                    os.path.join(os.path.dirname(__file__), "assets", "logo.png"),
-                    os.path.join(os.path.dirname(__file__), "logo.png"),
-                    os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "src", "assets", "logoPNG.png"),
-                ]:
-                    if os.path.exists(cand_path):
-                        with open(cand_path, "rb") as lf:
-                            raw_b64 = base64.b64encode(lf.read()).decode("utf-8")
-                            logo_b64 = f"data:image/png;base64,{raw_b64}"
-                        break
-            except Exception as e:
-                logger.error(f"Error loading logo for PDF: {e}")
+            _image_date_pairs.sort(key=lambda x: x[0])
+            uploaded_images = [p for _, p in _image_date_pairs]
+        else:
+            filled_state_json = json.loads(p_sess["filled_state_json"]) if p_sess.get("filled_state_json") else {}
+            db_docs = await conn.fetch("SELECT file_path, ocr_raw_json FROM uploaded_documents WHERE session_id = $1", session_id)
             
-            # Determine clinic_mode for AYUSH / Allopathic rendering
-            clinic_mode = "allopathic"
-            if dm and hasattr(dm.record, "clinic_mode"):
-                clinic_mode = dm.record.clinic_mode
-            elif filled_state_json and any(k.startswith("prakriti_") for k in filled_state_json.keys()):
-                clinic_mode = "ayush"
-            elif "ayush" in department_name.lower() or "ayur" in department_name.lower():
-                clinic_mode = "ayush"
-
-            # Parse vitals using dedicated parser
-            parsed_vitals = _parse_vitals_to_dict(
-                raw_vitals_str=p_info.get("vitals") if p_info else "",
-                weight_val=p_info.get("weight") if p_info else None,
-                height_val=p_info.get("height") if p_info else None,
-                filled_state=filled_state_json
-            )
-
-            token_val = q_row["token_id"] if q_row and q_row.get("token_id") else "TOKEN-2026"
-            abha_val = p_info["abha_id"] if p_info and p_info.get("abha_id") else "91-1001-2001-3001"
-            patient_name_val = p_info["full_name"] if p_info and p_info.get("full_name") else "Unknown"
-
-            # Generate offline ABDM QR code
-            qr_b64 = _generate_abdm_qr_b64(
-                f"ABDM:SWASTHYASYNC | TOKEN:{token_val} | ABHA:{abha_val} | PATIENT:{patient_name_val} | DATE:{ist_time}"
-            )
-
-            context = {
-                "clinic_mode": clinic_mode,
-                "filled_state": filled_state_json,
-                "patient": {
-                    "token": token_val,
-                    "abha_id": abha_val,
-                    "name": patient_name_val,
-                    "gender": p_info["gender"] if p_info else "Unknown",
-                    "age": str(p_info["age"]) if p_info else "Unknown",
-                    "id": p_sess["patient_id"],
-                    "phone": p_info["phone_number"] if p_info and p_info.get("phone_number") else "Not Provided",
-                    "address": p_info["address"] if p_info and p_info.get("address") else "Not Provided",
-                    "visit_type": "New OPD Visit" if not previous_history else "Follow-Up Visit"
-                },
-                "timestamp": ist_time,
-                "department": department_name,
-                "doctor_name": doctor_name,
-                "doctor_license": doctor_license,
-                "room_no": room_no,
-                "vitals": parsed_vitals,
-                "red_flag_active": bool(q_row["priority_flag"]) if q_row else False,
-                "triage_reason": q_row["priority_reason"] if q_row else "",
-                "ai_summary": ai_summary,
-                "ocr_data": ocr_data,
-                "uploaded_images": uploaded_images,
-                "image_dates": [d for d, _ in _image_date_pairs],
-                "doctor_prescription": p_sess["doctor_prescription"] if p_sess and "doctor_prescription" in p_sess.keys() else "",
-                "logo_b64": logo_b64,
-                "qr_b64": qr_b64,
-                "hospital_name": "SwasthyaSync Healthcare",
-                "hospital_subtext": "Central Outpatient Department & Clinical Excellence Center",
-                "previous_history": previous_history
-            }
+            _image_date_pairs = []
+            for doc in db_docs:
+                if doc["file_path"]:
+                    paths = [p.strip() for p in doc["file_path"].split(",") if p.strip()]
+                else:
+                    paths = []
+                ocr_data = json.loads(doc["ocr_raw_json"]) if doc["ocr_raw_json"] else {}
+                earliest = _extract_earliest_date(ocr_data)
+                if ocr_data:
+                    doc_extractions_list.append(ocr_data)
+                for p in paths:
+                    _image_date_pairs.append((earliest, p))
             
-            pdf_bytes = await generate_summary_pdf(session_id, context)
-            
-            # Merge previous PDF if it exists
-            if previous_history and previous_history.get("pdf_file_path") and os.path.exists(previous_history["pdf_file_path"]):
-                import PyPDF2
-                import io
-                try:
-                    merger = PyPDF2.PdfMerger()
-                    merger.append(io.BytesIO(pdf_bytes))
-                    merger.append(previous_history["pdf_file_path"])
+            _image_date_pairs.sort(key=lambda x: x[0])
+            uploaded_images = [p for _, p in _image_date_pairs]
                     
-                    out_stream = io.BytesIO()
-                    merger.write(out_stream)
-                    merger.close()
-                    pdf_bytes = out_stream.getvalue()
-                except Exception as merge_err:
-                    pass
+        for ext in doc_extractions_list:
+            if "medications" in ext:
+                for med in ext["medications"]:
+                    extracted_medications.append({
+                        "name": med.get("drug_name", ""),
+                        "dosage": med.get("dosage", ""),
+                        "frequency": med.get("frequency", "")
+                    })
+            if "lab_values" in ext:
+                for lab in ext["lab_values"]:
+                    extracted_labs.append({
+                        "parameter": lab.get("test_name", ""),
+                        "value": f"{lab.get('value', '')} {lab.get('unit', '')}".strip(),
+                        "is_abnormal": lab.get("is_abnormal", False)
+                    })
+
+        if not filled_state_json and not doc_extractions_list:
+            ai_summary = {
+                "clinical_narrative": p_sess["chief_complaint"] if p_sess else "No complaint recorded",
+                "critical_highlights": []
+            }
+        else:
+            ai_summary = generate_clinical_summary(filled_state_json, doc_extractions_list)
+
+        ocr_data = {
+            "extracted_medications": extracted_medications,
+            "extracted_labs": extracted_labs
+        }
+        
+        previous_history = None
+        prev_sess = await conn.fetchrow("SELECT session_id FROM patient_sessions WHERE patient_id = $1 AND session_id != $2 ORDER BY created_at DESC LIMIT 1", p_sess["patient_id"], session_id)
+        if prev_sess:
+            old_session_id = prev_sess["session_id"]
+            old_sum = await conn.fetchrow("SELECT full_detailed_summary, pdf_file_path FROM clinical_summaries WHERE session_id = $1 ORDER BY generated_at DESC LIMIT 1", old_session_id)
+            if old_sum:
+                previous_history = json.loads(old_sum["full_detailed_summary"]) if old_sum["full_detailed_summary"] else None
+                if previous_history and old_sum["pdf_file_path"]:
+                    previous_history["pdf_file_path"] = old_sum["pdf_file_path"]
                     
-            summary_id = f"sum_{uuid.uuid4().hex[:8]}"
-            
-            from supabase import create_client
-            supabase_url = os.getenv("SUPABASE_URL")
-            supabase_key = os.getenv("SUPABASE_KEY")
-            pdf_path = None
-            if supabase_url and supabase_key:
-                try:
-                    supabase = create_client(supabase_url, supabase_key)
-                    storage_path = f"patient-documents/{summary_id}.pdf"
-                    supabase.storage.from_("patient-records").upload(
-                        file=pdf_bytes,
-                        path=storage_path,
-                        file_options={"content-type": "application/pdf"}
-                    )
-                    url_resp = supabase.storage.from_("patient-records").get_public_url(storage_path)
-                    pdf_path = url_resp
-                except Exception as e:
-                    import logging
-                    logging.getLogger(__name__).error(f"Supabase upload error for PDF: {e}")
-            
-            if not pdf_path:
-                # Local fallback ONLY if config is missing (but we expect it to exist)
-                pdf_dir = os.path.join(os.path.dirname(__file__), "generated_pdfs")
-                os.makedirs(pdf_dir, exist_ok=True)
-                local_path = os.path.join(pdf_dir, f"{summary_id}.pdf")
-                with open(local_path, "wb") as f:
-                    f.write(pdf_bytes)
-                pdf_path = local_path
-                
+        # Get Logo B64 securely
+        logo_b64 = ""
+        try:
+            import base64
+            for cand_path in [
+                os.path.join(os.path.dirname(__file__), "assets", "logo.png"),
+                os.path.join(os.path.dirname(__file__), "logo.png"),
+                os.path.join(os.path.dirname(os.path.dirname(__file__)), "frontend", "src", "assets", "logoPNG.png"),
+            ]:
+                if os.path.exists(cand_path):
+                    with open(cand_path, "rb") as lf:
+                        raw_b64 = base64.b64encode(lf.read()).decode("utf-8")
+                        logo_b64 = f"data:image/png;base64,{raw_b64}"
+                    break
+        except Exception as e:
+            logger.error(f"Error loading logo for PDF: {e}")
+        
+        # Determine clinic_mode for AYUSH / Allopathic rendering
+        clinic_mode = "allopathic"
+        if dm and hasattr(dm.record, "clinic_mode"):
+            clinic_mode = dm.record.clinic_mode
+        elif filled_state_json and any(k.startswith("prakriti_") for k in filled_state_json.keys()):
+            clinic_mode = "ayush"
+        elif "ayush" in department_name.lower() or "ayur" in department_name.lower():
+            clinic_mode = "ayush"
+
+        # Parse vitals using dedicated parser
+        parsed_vitals = _parse_vitals_to_dict(
+            raw_vitals_str=p_info.get("vitals") if p_info else "",
+            weight_val=p_info.get("weight") if p_info else None,
+            height_val=p_info.get("height") if p_info else None,
+            filled_state=filled_state_json
+        )
+
+        token_val = q_row["token_id"] if q_row and q_row.get("token_id") else "TOKEN-2026"
+        abha_val = p_info["abha_id"] if p_info and p_info.get("abha_id") else "91-1001-2001-3001"
+        patient_name_val = p_info["full_name"] if p_info and p_info.get("full_name") else "Unknown"
+
+        # Generate offline ABDM QR code
+        qr_b64 = _generate_abdm_qr_b64(
+            f"ABDM:SWASTHYASYNC | TOKEN:{token_val} | ABHA:{abha_val} | PATIENT:{patient_name_val} | DATE:{ist_time}"
+        )
+
+        context = {
+            "clinic_mode": clinic_mode,
+            "filled_state": filled_state_json,
+            "patient": {
+                "token": token_val,
+                "abha_id": abha_val,
+                "name": patient_name_val,
+                "gender": p_info["gender"] if p_info else "Unknown",
+                "age": str(p_info["age"]) if p_info else "Unknown",
+                "id": p_sess["patient_id"],
+                "phone": p_info["phone_number"] if p_info and p_info.get("phone_number") else "Not Provided",
+                "address": p_info["address"] if p_info and p_info.get("address") else "Not Provided",
+                "visit_type": "New OPD Visit" if not previous_history else "Follow-Up Visit"
+            },
+            "timestamp": ist_time,
+            "department": department_name,
+            "doctor_name": doctor_name,
+            "doctor_license": doctor_license,
+            "room_no": room_no,
+            "vitals": parsed_vitals,
+            "red_flag_active": bool(q_row["priority_flag"]) if q_row else False,
+            "triage_reason": q_row["priority_reason"] if q_row else "",
+            "ai_summary": ai_summary,
+            "ocr_data": ocr_data,
+            "uploaded_images": uploaded_images,
+            "image_dates": [d for d, _ in _image_date_pairs],
+            "doctor_prescription": effective_doc_rx,
+            "logo_b64": logo_b64,
+            "qr_b64": qr_b64,
+            "hospital_name": "SwasthyaSync Healthcare",
+            "hospital_subtext": "Central Outpatient Department & Clinical Excellence Center",
+            "previous_history": previous_history
+        }
+        
+        pdf_bytes = await generate_summary_pdf(session_id, context)
+        
+        # Merge previous PDF if it exists
+        if previous_history and previous_history.get("pdf_file_path") and os.path.exists(previous_history["pdf_file_path"]):
+            import PyPDF2
+            import io
             try:
-                import database
-                if clinic_mode in ("ayush", "integrative") and "ayush_summary" in context:
-                    ai_summary["ayush_assessment"] = context["ayush_summary"]
-                await database.save_clinical_summary(
-                    session_id=session_id,
-                    small_summary=ai_summary.get("Narrative", ""),
-                    full_detailed_summary=ai_summary,
-                    critical_highlights=ai_summary.get("Assessment", []),
-                    contradictions_found=[c.model_dump() for c in getattr(dm.record, 'contradictions', [])] if dm and hasattr(dm.record, 'contradictions') else [],
-                    pdf_file_path=pdf_path
-                )
-            except Exception as e:
+                merger = PyPDF2.PdfMerger()
+                merger.append(io.BytesIO(pdf_bytes))
+                merger.append(previous_history["pdf_file_path"])
+                
+                out_stream = io.BytesIO()
+                merger.write(out_stream)
+                merger.close()
+                pdf_bytes = out_stream.getvalue()
+            except Exception as merge_err:
                 pass
                 
-            if pdf_path.startswith("http"):
-                from fastapi.responses import RedirectResponse
-                return RedirectResponse(pdf_path)
-            else:
-                return FileResponse(pdf_path, media_type="application/pdf", filename=f"{summary_id}.pdf")
+        summary_id = f"sum_{uuid.uuid4().hex[:8]}"
+        
+        from supabase import create_client
+        supabase_url = os.getenv("SUPABASE_URL")
+        supabase_key = os.getenv("SUPABASE_KEY")
+        pdf_path = None
+        if supabase_url and supabase_key:
+            try:
+                supabase = create_client(supabase_url, supabase_key)
+                storage_path = f"patient-documents/{summary_id}.pdf"
+                supabase.storage.from_("patient-records").upload(
+                    file=pdf_bytes,
+                    path=storage_path,
+                    file_options={"content-type": "application/pdf"}
+                )
+                url_resp = supabase.storage.from_("patient-records").get_public_url(storage_path)
+                pdf_path = url_resp
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"Supabase upload error for PDF: {e}")
+        
+        if not pdf_path:
+            pdf_dir = os.path.join(os.path.dirname(__file__), "generated_pdfs")
+            os.makedirs(pdf_dir, exist_ok=True)
+            local_path = os.path.join(pdf_dir, f"{summary_id}.pdf")
+            with open(local_path, "wb") as f:
+                f.write(pdf_bytes)
+            pdf_path = local_path
+            
+        try:
+            if clinic_mode in ("ayush", "integrative") and "ayush_summary" in context:
+                ai_summary["ayush_assessment"] = context["ayush_summary"]
+            await database.save_clinical_summary(
+                session_id=session_id,
+                small_summary=ai_summary.get("Narrative", "") or ai_summary.get("clinical_narrative", ""),
+                full_detailed_summary=ai_summary,
+                critical_highlights=ai_summary.get("Assessment", []) or ai_summary.get("critical_highlights", []),
+                contradictions_found=[c.model_dump() for c in getattr(dm.record, 'contradictions', [])] if dm and hasattr(dm.record, 'contradictions') else [],
+                pdf_file_path=pdf_path,
+                doctor_consultation_notes=effective_doc_rx or None,
+                doctor_id=valid_doc_id
+            )
         except Exception as e:
-            import traceback
-            traceback.print_exc()
-            raise HTTPException(500, f"Failed to generate PDF: {e}")
+            logger.error(f"Error persisting clinical summary for {session_id}: {e}")
+
+        return pdf_path, summary_id
+
+
+@extended_router.get("/api/summary/{session_id}/pdf")
+@extended_router.get("/api/pdf/{session_id}")
+async def get_summary_pdf(session_id: str, regenerate: bool = False, force: bool = False):
+    import database
+    import os
+    from fastapi.responses import FileResponse, RedirectResponse
+    from fastapi import HTTPException
+    
+    if not database._pool: raise HTTPException(500, "DB error")
+    async with database._pool.acquire() as conn:
+        if not regenerate and not force:
+            row = await conn.fetchrow("""
+                SELECT cs.summary_id, cs.pdf_file_path, cs.doctor_consultation_notes, cs.generated_at,
+                       ps.doctor_prescription, ps.completed_at, ps.session_status
+                FROM clinical_summaries cs
+                LEFT JOIN patient_sessions ps ON cs.session_id = ps.session_id
+                WHERE cs.session_id = $1 AND cs.pdf_file_path IS NOT NULL
+                ORDER BY cs.generated_at DESC LIMIT 1
+            """, session_id)
+            if not row:
+                row = await conn.fetchrow("""
+                    SELECT cs.summary_id, cs.pdf_file_path, cs.doctor_consultation_notes, cs.generated_at,
+                           ps.doctor_prescription, ps.completed_at, ps.session_status
+                    FROM clinical_summaries cs
+                    LEFT JOIN patient_sessions ps ON cs.session_id = ps.session_id
+                    WHERE cs.summary_id = $1
+                """, session_id)
+                
+            is_stale = False
+            if row and row.get("doctor_prescription"):
+                # If doctor notes exist on session, but missing from clinical summary or summary was generated before session completion
+                if not row.get("doctor_consultation_notes"):
+                    is_stale = True
+                elif row.get("completed_at") and row.get("generated_at") and row["generated_at"] < row["completed_at"]:
+                    is_stale = True
+
+            if row and row["pdf_file_path"] and not is_stale:
+                path = row["pdf_file_path"]
+                if path.startswith("http"):
+                    return RedirectResponse(path)
+                elif os.path.exists(path):
+                    return FileResponse(path, media_type="application/pdf", filename=f"{row['summary_id']}.pdf")
+            
+    # Generate fresh or regenerate
+    try:
+        pdf_path, summary_id = await generate_and_save_session_pdf(session_id)
+        if pdf_path.startswith("http"):
+            return RedirectResponse(pdf_path)
+        elif os.path.exists(pdf_path):
+            return FileResponse(pdf_path, media_type="application/pdf", filename=f"{summary_id}.pdf")
+        else:
+            raise HTTPException(500, "Generated PDF could not be located.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error serving summary PDF: {e}", exc_info=True)
+        raise HTTPException(500, f"Failed to generate PDF: {e}")
 
 
 @extended_router.get("/api/patient/{patient_id}/summaries")
@@ -1248,13 +1309,24 @@ async def get_single_session(session_id: str):
 
 @extended_router.put("/api/session/{session_id}/complete")
 async def complete_session_doctor(session_id: str, req: CompleteSessionReq):
-    doc_prescription_str = f"[{req.action}] {req.doctor_prescription}"
+    doc_prescription_str = f"[{req.action}] {req.doctor_prescription}".strip()
     if database._pool:
         async with database._pool.acquire() as conn:
             await conn.execute(
                 "UPDATE patient_sessions SET doctor_prescription = $1, session_status = 'COMPLETED', completed_at = CURRENT_TIMESTAMP WHERE session_id = $2", 
                 doc_prescription_str, session_id
             )
+            await conn.execute(
+                "UPDATE clinical_summaries SET doctor_consultation_notes = $1, doctor_signed_at = CURRENT_TIMESTAMP WHERE session_id = $2",
+                doc_prescription_str, session_id
+            )
+
+    pdf_path = None
+    try:
+        pdf_path, summary_id = await generate_and_save_session_pdf(session_id, doctor_prescription_override=doc_prescription_str)
+        logger.info(f"Successfully generated and stored final signed PDF for session {session_id}: {pdf_path}")
+    except Exception as e:
+        logger.error(f"Error generating final signed PDF for session {session_id}: {e}", exc_info=True)
             
     try:
         import httpx
@@ -1266,4 +1338,7 @@ async def complete_session_doctor(session_id: str, req: CompleteSessionReq):
     except:
         pass
         
-    return {"status": "success"}
+    return {
+        "status": "success",
+        "pdf_url": pdf_path or f"/api/summary/{session_id}/pdf?regenerate=true"
+    }

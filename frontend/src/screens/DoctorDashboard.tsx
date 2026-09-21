@@ -56,8 +56,12 @@ export const DoctorDashboard: React.FC = () => {
       });
       
       if (res.ok) {
-        // Pop open the unified AI + Doctor prescription PDF with a cache buster
-        window.open(`${getApiBaseUrl()}/api/summary/${session_id}/pdf?t=${Date.now()}`, '_blank');
+        const data = await res.json().catch(() => ({}));
+        const pdfUrl = data.pdf_url && data.pdf_url.startsWith('http')
+          ? data.pdf_url
+          : `${getApiBaseUrl()}/api/summary/${session_id}/pdf?regenerate=true&t=${Date.now()}`;
+        // Pop open the final signed AI + Doctor prescription PDF with cache buster
+        window.open(pdfUrl, '_blank');
       }
       
       navigate('/doctor'); // back to queue
