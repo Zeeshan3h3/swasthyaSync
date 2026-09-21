@@ -23,6 +23,50 @@ interface Message {
   suggested_followups?: string[];
 }
 
+function cleanAiResponse(raw: any): { text: string; parsedData?: any } {
+  if (!raw) return { text: '' };
+  let str = typeof raw === 'string' ? raw.trim() : JSON.stringify(raw);
+
+  // Strip markdown code fences if present
+  if (str.startsWith('```json')) {
+    str = str.substring(7);
+  } else if (str.startsWith('```')) {
+    str = str.substring(3);
+  }
+  if (str.endsWith('```')) {
+    str = str.substring(0, str.length - 3);
+  }
+  str = str.trim();
+
+  // If it's a JSON string, try to parse
+  if (str.startsWith('{') && str.endsWith('}')) {
+    try {
+      const parsed = JSON.parse(str);
+      if (parsed && typeof parsed === 'object') {
+        const innerText = parsed.response || parsed.reply || '';
+        if (innerText) {
+          const nested = cleanAiResponse(innerText);
+          return { text: nested.text || innerText, parsedData: parsed };
+        }
+        return { text: str, parsedData: parsed };
+      }
+    } catch {
+      // Ignore parse failure
+    }
+  }
+
+  // Regex fallback: check if there is an embedded JSON inside the string: { "response": "..." }
+  const jsonMatch = str.match(/\{[\s\S]*"response"\s*:\s*"([\s\S]*?)"[\s\S]*\}/);
+  if (jsonMatch && jsonMatch[1]) {
+    try {
+      const unescaped = jsonMatch[1].replace(/\\n/g, '\n').replace(/\\"/g, '"');
+      return { text: unescaped };
+    } catch {}
+  }
+
+  return { text: str };
+}
+
 export const ChatScreen: React.FC = () => {
   const navigate = useNavigate();
   const { t } = useTranslation();
@@ -36,7 +80,12 @@ export const ChatScreen: React.FC = () => {
       if (saved) {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length > 0) {
-          return parsed;
+          return parsed.map((m: Message) => {
+            if (m.sender === 'ai' && m.text && (m.text.includes('```json') || m.text.trim().startsWith('{'))) {
+              return { ...m, text: cleanAiResponse(m.text).text || m.text };
+            }
+            return m;
+          });
         }
       }
     } catch {}
@@ -118,15 +167,21 @@ export const ChatScreen: React.FC = () => {
         { headers }
       );
 
-      const aiReply = response.data.reply || response.data.response || 'I am ready to help with your health questions.';
+      let data = response.data || {};
+      let rawReply = data.reply || data.response || 'I am ready to help with your health questions.';
+      const { text: cleanReply, parsedData } = cleanAiResponse(rawReply);
+      if (parsedData) {
+        data = { ...data, ...parsedData };
+      }
+
       const aiMsg: Message = {
         id: (Date.now() + 1).toString(),
         sender: 'ai',
-        text: aiReply,
-        sources: response.data.sources || [],
-        emergency: Boolean(response.data.emergency),
-        needs_clinician: Boolean(response.data.needs_clinician),
-        suggested_followups: response.data.suggested_followups || []
+        text: cleanReply || 'I am ready to help with your health questions.',
+        sources: data.sources || [],
+        emergency: Boolean(data.emergency),
+        needs_clinician: Boolean(data.needs_clinician),
+        suggested_followups: data.suggested_followups || []
       };
 
       setMessages(prev => [...prev, aiMsg]);
@@ -223,7 +278,7 @@ export const ChatScreen: React.FC = () => {
                   ? 'bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-tr-md shadow-blue-600/15'
                   : 'bg-white text-slate-800 border border-slate-200/80 rounded-tl-md shadow-2xs'
               }`}>
-                <div>{msg.text}</div>
+                <div>{msg.sender === 'ai' ? cleanAiResponse(msg.text).text : msg.text}</div>
 
                 {/* Emergency Urgent Callout Banner */}
                 {msg.emergency && (

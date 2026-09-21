@@ -179,7 +179,7 @@ from services.chat_tools import (
     get_my_queue_status,
     search_hospital
 )
-from llm_client import generate_portal_chat_structured, generate_portal_chat_reply
+from llm_client import generate_portal_chat_structured, generate_portal_chat_reply, clean_and_parse_json
 
 
 @app.get("/api/portal/chat/status")
@@ -301,9 +301,24 @@ async def patient_portal_chat(request: ChatRequest, phone: str = Depends(get_ver
         structured = generate_portal_chat_structured(system_prompt, user_msg)
         response_text = structured.get("response") or structured.get("reply", "")
 
+        # Defensive check: unwrap if response_text is itself a stringified JSON or markdown codeblock
+        if isinstance(response_text, str) and (response_text.strip().startswith("{") or response_text.strip().startswith("```")):
+            inner = clean_and_parse_json(response_text)
+            if inner and ("response" in inner or "reply" in inner):
+                response_text = inner.get("response") or inner.get("reply", "")
+                structured["response"] = response_text
+                if "sources" in inner and not structured.get("sources"):
+                    structured["sources"] = inner["sources"]
+                if "suggested_followups" in inner and not structured.get("suggested_followups"):
+                    structured["suggested_followups"] = inner["suggested_followups"]
+                if "intent" in inner and structured.get("intent") in ["UNKNOWN", "GENERAL_HEALTH"]:
+                    structured["intent"] = inner["intent"]
+
+        structured["response"] = response_text
+
         return {
-            "reply": response_text,
-            **structured
+            **structured,
+            "reply": response_text
         }
 
     except Exception as e:
