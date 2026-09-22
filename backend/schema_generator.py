@@ -55,29 +55,23 @@ def _build_schema_generation_prompt(
     if doctor_custom_instructions:
         doctor_instruction_text = f"\n\nCRITICAL DOCTOR INSTRUCTIONS:\nThe attending physician for this patient has provided the following custom intake instructions: \"{doctor_custom_instructions}\"\nYou MUST adjust your generated JSON schema to explicitly include fields that capture this specific information."
 
-    system_prompt = f"""You are a senior clinical consultant designing a structured patient interview schema.
+    system_prompt = f"""You are a senior clinical consultant designing a structured, focused patient intake schema.
 
-Your task: Given a patient's chief complaint and demographics, generate a detailed, complaint-specific JSON schema of fields that a medical interviewer should collect. This schema should mirror what an actual physician would ask based on the Macleod's Clinical Examination framework.{doctor_instruction_text}
+Your task: Given a patient's chief complaint and demographics, generate a concise, complaint-specific JSON schema of fields that an intake assistant should collect.{doctor_instruction_text}
 
 CRITICAL RULES:
-1. The schema must be HIGHLY SPECIFIC to the chief complaint. Do NOT include generic screening questions that are irrelevant (e.g., do NOT ask about family diabetes history for an isolated ankle sprain).
-2. Include fields from these categories ONLY if clinically relevant:
-   - HPI (History of Present Illness) — ALWAYS relevant
-   - PMH (Past Medical History) — include only if relevant to the complaint
-   - DH (Drug History / Allergies) — include if medications could be relevant
-   - FH (Family History) — include only if hereditary factors matter
-   - SH (Social History) — include only if lifestyle is relevant
-   - ROS (Review of Systems) — targeted, not exhaustive
-   - red_flag_check — ALWAYS include safety-critical screening questions
-3. Each field should have a clear, natural question_intent (what we want to learn).
-4. Assign priority: "critical" (must ask), "high" (should ask), "medium" (nice to have), "optional" (if time permits).
-5. Mark red_flag: true for any field where a positive answer indicates a medical emergency.
-6. Mark fork_eligible: true for fields where a POSITIVE/AFFIRMATIVE answer would need 1-2 targeted follow-up sub-questions. Examples:
-   - "Do you have vision changes?" → if YES, fork: "Which eye?" + "When did it start?"
-   - "Any previous surgeries?" → if YES, fork: "What surgery?" + "When?"
-   Most fields should be fork_eligible: false. Only tag 3-5 fields max per schema.
-7. Use conditional_on for fields that only matter given a previous answer (format: "field_id:value").
-8. Generate 15-30 fields total — enough for a thorough but not exhausting interview.
+1. The schema must be HIGHLY SPECIFIC to the chief complaint. Do NOT include generic screening questions that are irrelevant.
+2. Generate EXACTLY 5 to 7 high-yield clinical fields total. Focus strictly on:
+   - Onset / duration (HPI)
+   - Severity / character / exact anatomical location (HPI)
+   - Primary red-flag / safety sign for this condition (red_flag_check)
+   - Relevant chronic illnesses (PMH)
+   - Current medications or drug allergies (DH)
+3. Each field must have a clear, natural question_intent.
+4. Assign priority: "critical" (must ask), "high" (should ask), "medium" (optional).
+5. Mark red_flag: true ONLY if a positive answer indicates an acute medical emergency.
+6. Set fork_eligible: false for all fields.
+7. Output ONLY a valid JSON object matching the schema below. Keep it strictly between 5 and 7 fields.
 
 The following fields are MANDATORY red-flag safety requirements for this complaint category. They MUST appear in your schema:
 {safety_floor_text}
@@ -90,10 +84,10 @@ Output ONLY a JSON object with this exact structure:
       "id": "unique_snake_case_id",
       "question_intent": "what this field is trying to learn, in plain language",
       "type": "string",
-      "priority": "critical|high|medium|optional",
+      "priority": "critical|high|medium",
       "red_flag": true/false,
-      "fork_eligible": true/false,
-      "category": "HPI|PMH|DH|FH|SH|ROS|red_flag_check",
+      "fork_eligible": false,
+      "category": "HPI|PMH|DH|red_flag_check",
       "conditional_on": null
     }}
   ]
@@ -226,34 +220,32 @@ def _build_static_fallback(chief_complaint: str, category: str) -> dict:
     """
     safety_fields = get_safety_floor(category)
     
-    # Add some universal baseline fields
+    # Minimal universal baseline fields
     baseline = [
-        {"id": "symptom_onset", "question_intent": "When did the problem start", "type": "string", "priority": "critical", "red_flag": False, "fork_eligible": False, "category": "HPI", "conditional_on": None},
         {"id": "symptom_duration", "question_intent": "How long has it been going on", "type": "string", "priority": "critical", "red_flag": False, "fork_eligible": False, "category": "HPI", "conditional_on": None},
-        {"id": "symptom_severity_impact", "question_intent": "How much does it affect daily life", "type": "string", "priority": "high", "red_flag": False, "fork_eligible": False, "category": "HPI", "conditional_on": None},
-        {"id": "prior_episodes", "question_intent": "Has this happened before", "type": "string", "priority": "high", "red_flag": False, "fork_eligible": True, "category": "HPI", "conditional_on": None},
+        {"id": "symptom_severity", "question_intent": "How severe is the problem", "type": "string", "priority": "high", "red_flag": False, "fork_eligible": False, "category": "HPI", "conditional_on": None},
         {"id": "current_medications", "question_intent": "Any medications currently being taken", "type": "string", "priority": "high", "red_flag": False, "fork_eligible": False, "category": "DH", "conditional_on": None},
-        {"id": "known_allergies", "question_intent": "Any known drug or food allergies", "type": "string", "priority": "high", "red_flag": False, "fork_eligible": True, "category": "DH", "conditional_on": None},
-        {"id": "chronic_conditions", "question_intent": "Any existing chronic health conditions (diabetes, hypertension, etc)", "type": "string", "priority": "medium", "red_flag": False, "fork_eligible": False, "category": "PMH", "conditional_on": None},
+        {"id": "chronic_conditions", "question_intent": "Any existing chronic health conditions", "type": "string", "priority": "medium", "red_flag": False, "fork_eligible": False, "category": "PMH", "conditional_on": None},
     ]
 
-    # Merge baseline + safety floor, avoiding duplicates
+    # Merge baseline + safety floor, avoiding duplicates, capping at 7
     existing_ids = {f["id"] for f in safety_fields}
     all_fields = list(safety_fields)
     for f in baseline:
-        if f["id"] not in existing_ids:
+        if f["id"] not in existing_ids and len(all_fields) < 7:
             all_fields.append(f)
 
     return {
         "chief_complaint": chief_complaint,
-        "fields": all_fields,
+        "fields": all_fields[:7],
     }
 
 
-def _validate_schema(schema: dict, chief_complaint: str) -> dict:
-    """Validate and clean the generated schema."""
+def _validate_schema(schema: dict, chief_complaint: str, is_ayush: bool = False) -> dict:
+    """Validate and clean the generated schema. Ensures strictly bounded 5-7 fields for allopathic."""
     schema.setdefault("chief_complaint", chief_complaint)
     fields = schema.get("fields", [])
+    is_ayush_schema = is_ayush or any(f.get("category") == "PRAKRITI" for f in fields)
 
     # Ensure all fields have required keys
     valid_fields = []
@@ -264,12 +256,12 @@ def _validate_schema(schema: dict, chief_complaint: str) -> dict:
             continue
         seen_ids.add(fid)
 
-        # Ensure defaults
+        # Ensure defaults & guarantee fork_eligible is False
         f.setdefault("question_intent", f.get("id", "").replace("_", " "))
         f.setdefault("type", "string")
         f.setdefault("priority", "medium")
         f.setdefault("red_flag", False)
-        f.setdefault("fork_eligible", False)
+        f["fork_eligible"] = False  # Banned to prevent dynamic branch explosion
         f.setdefault("category", "HPI")
         f.setdefault("conditional_on", None)
 
@@ -278,6 +270,12 @@ def _validate_schema(schema: dict, chief_complaint: str) -> dict:
             f["priority"] = "medium"
 
         valid_fields.append(f)
+
+    # If standard allopathic schema exceeds 7 fields, prioritize critical/red-flag items first and cap strictly at 7
+    if not is_ayush_schema and len(valid_fields) > 7:
+        priority_weights = {"critical": 0, "high": 1, "medium": 2, "optional": 3}
+        valid_fields.sort(key=lambda x: (priority_weights.get(x.get("priority", "medium"), 2), not x.get("red_flag", False)))
+        valid_fields = valid_fields[:7]
 
     schema["fields"] = valid_fields
     return schema

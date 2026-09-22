@@ -40,6 +40,7 @@ class DialogueManager:
         self.record = PatientRecord(clinic_mode=clinic_mode, language=language)
         self.language = language
         self.last_active_time = time.time()
+        self.current_target_field: dict | None = None
 
     # ──────────────────────────────────────────────────────────────────
     # PUBLIC API
@@ -256,7 +257,7 @@ class DialogueManager:
         # ── INITIAL EXTRACTION PASS ──
         # Extract any symptoms/details already mentioned in the chief complaint!
         try:
-            initial_extracted, initial_additional = conversation_engine.extract_from_response(
+            initial_extracted, _ = conversation_engine.extract_from_response(
                 patient_message=value,
                 unfilled_fields=schema.get("fields", []),
                 filled_summary="",
@@ -265,15 +266,8 @@ class DialogueManager:
                 doctor_custom_instructions=self.record.doctor_custom_instructions,
             )
             for fid, entry in initial_extracted.items():
-                self.record.update_filled_state(
-                    fid,
-                    entry.get("value"),
-                    entry.get("confidence", 0.95),
-                )
+                self.record.update_filled_state(fid, entry.get("value"), entry.get("confidence", 0.95))
                 logger.info(f"⚡ Chief Complaint pre-filled: {fid} = {entry.get('value')}")
-
-            # Inject any additional unprompted clinical findings and fork if warranted
-            self._inject_additional_findings_and_fork(initial_additional, schema)
         except Exception as e:
             logger.warning(f"Initial extraction pass on chief complaint failed: {e}")
 
@@ -281,72 +275,15 @@ class DialogueManager:
         self.fsm.set_state("DYNAMIC_INTERVIEW")
         self.record.macro_state = "DYNAMIC_INTERVIEW"
 
-        # Removed db checkpoint here, handled in main.py
-
         return self._build_ui_instruction()
 
     # ──────────────────────────────────────────────────────────────────
-    # UNPROMPTED CLINICAL FINDINGS & DYNAMIC FORK INJECTOR
+    # UNPROMPTED CLINICAL FINDINGS & DYNAMIC FORK INJECTOR (DISABLED)
     # ──────────────────────────────────────────────────────────────────
 
     def _inject_additional_findings_and_fork(self, additional_findings: list[dict], schema: dict):
-        """
-        Dynamically registers any unprompted clinical findings into schema and filled_state
-        so extra information is NEVER lost, and evaluates if sub-questions should be forked.
-        """
-        if not additional_findings:
-            return
-
-        existing_ids = {f["id"] for f in schema.get("fields", [])}
-        for finding in additional_findings:
-            fid = finding.get("id", f"unprompted_{len(existing_ids)}")
-            if not fid.startswith("unprompted_"):
-                fid = f"unprompted_{fid}"
-
-            # 1. Store as filled immediately so it's captured in EMR summary & PDF!
-            val_summary = finding.get("value", "")
-            self.record.update_filled_state(
-                fid,
-                val_summary,
-                finding.get("confidence", 0.95),
-            )
-
-            # 2. Add to schema fields if not already present
-            if fid not in existing_ids:
-                new_field = {
-                    "id": fid,
-                    "question_intent": finding.get("question_intent", fid.replace("_", " ")),
-                    "type": "string",
-                    "priority": finding.get("priority", "high"),
-                    "red_flag": finding.get("red_flag", False),
-                    "fork_eligible": finding.get("fork_eligible", True),
-                    "category": finding.get("category", "HPI"),
-                    "conditional_on": None,
-                }
-                schema.setdefault("fields", []).append(new_field)
-                existing_ids.add(fid)
-                logger.info(f"➕ Injected new unprompted field into schema: '{fid}' = {val_summary}")
-
-                # 3. Dynamic fork check: if fork_eligible or red flag, generate follow-up questions!
-                if new_field.get("fork_eligible", False) or new_field.get("red_flag", False):
-                    fork_result = conversation_engine.check_and_generate_fork_questions(
-                        parent_field=new_field,
-                        patient_answer=str(val_summary),
-                        chief_complaint=self.record.chief_complaint.value if self.record.chief_complaint else "",
-                        language=self.language,
-                        doctor_custom_instructions=self.record.doctor_custom_instructions,
-                    )
-                    if fork_result:
-                        for sub_field in fork_result:
-                            sub_id = sub_field["id"]
-                            if sub_id not in existing_ids:
-                                if new_field.get("red_flag"):
-                                    sub_field["priority"] = "critical"
-                                    sub_field["red_flag"] = True
-                                schema["fields"].append(sub_field)
-                                self.record.filled_state[sub_id] = {"value": None, "confidence": 0.0}
-                                existing_ids.add(sub_id)
-                        logger.info(f"🔀 Fork triggered on unprompted finding '{fid}': injected {len(fork_result)} sub-questions")
+        """Disabled to prevent runtime schema mutations and hallucinations."""
+        return
 
     # ──────────────────────────────────────────────────────────────────
     # DYNAMIC INTERVIEW HANDLER (Stage 2 loop)
@@ -355,7 +292,7 @@ class DialogueManager:
     def _handle_dynamic_turn(self, input_type: str, value: str) -> dict:
         """
         Handle one turn of the dynamic interview.
-        1. Extract fields from patient's message
+        1. Extract single target field from patient's response (or direct deterministic tap)
         2. Run safety check
         3. Check if interview is complete
         4. Select next field
@@ -367,53 +304,50 @@ class DialogueManager:
         self.record.add_conversation_message("patient", value, "DYNAMIC_INTERVIEW")
         self.record.interview_turn_count += 1
 
-        # 2. EXTRACTION: get field values from patient's response
-        unfilled_fields = [
-            f for f in schema.get("fields", [])
-            if not (self.record.filled_state.get(f["id"], {}).get("value"))
-        ]
+        # 2. EXTRACTION: Single-field deterministic or targeted extraction
+        is_negative = conversation_engine._is_negative_answer(value)
+        target_field = self.current_target_field
 
-        extracted, additional_findings = conversation_engine.extract_from_response(
-            patient_message=value,
-            unfilled_fields=unfilled_fields,
-            filled_summary=self.record.get_filled_summary(),
-            conversation_history=self.record.conversation_history,
-            language=self.language,
-            doctor_custom_instructions=self.record.doctor_custom_instructions,
-        )
-
-        # 3. Update filled_state with extracted data
-        for fid, entry in extracted.items():
-            self.record.update_filled_state(
-                fid,
-                entry.get("value"),
-                entry.get("confidence", 0.8),
-            )
-            logger.debug(f"Filled: {fid} = {entry.get('value')}")
-
-        # 3.1 INJECT ADDITIONAL UNPROMPTED FINDINGS & FORK DYNAMICALLY
-        self._inject_additional_findings_and_fork(additional_findings, schema)
-
-        # 3.5 FORK CHECK: Did we just fill a fork_eligible field with a significant answer?
-        for fid, entry in extracted.items():
-            field_spec = next((f for f in schema.get("fields", []) if f["id"] == fid), None)
-            if field_spec and field_spec.get("fork_eligible", False):
-                fork_result = conversation_engine.check_and_generate_fork_questions(
-                    parent_field=field_spec,
-                    patient_answer=str(entry.get("value", "")),
-                    chief_complaint=self.record.chief_complaint.value if self.record.chief_complaint else "",
+        if target_field:
+            target_id = target_field.get("id")
+            if input_type == "tap":
+                # Option tapped directly: 100% deterministic, zero LLM hallucination
+                recorded_val = "Denied / None" if is_negative else value
+                self.record.update_filled_state(target_id, recorded_val, confidence=1.0)
+                logger.info(f"🎯 Deterministic Tap filled: {target_id} = '{recorded_val}'")
+            elif is_negative:
+                self.record.update_filled_state(target_id, "Denied / None", confidence=1.0)
+                logger.info(f"🚫 Negative answer recorded for {target_id}: Denied / None")
+            else:
+                extracted_dict = conversation_engine.extract_single_target_field(
+                    target_field=target_field,
+                    patient_message=value,
                     language=self.language,
-                    doctor_custom_instructions=self.record.doctor_custom_instructions,
                 )
-                if fork_result:
-                    # Inject sub-fields into the live schema
-                    existing_ids = {f["id"] for f in schema["fields"]}
-                    for sub_field in fork_result:
-                        sub_id = sub_field["id"]
-                        if sub_id not in existing_ids:
-                            schema["fields"].append(sub_field)
-                            self.record.filled_state[sub_id] = {"value": None, "confidence": 0.0}
-                    logger.info(f"Fork triggered on '{fid}': injected {len(fork_result)} sub-fields")
+                extracted_val = extracted_dict.get("value")
+                extracted_conf = extracted_dict.get("confidence", 0.95)
+                if extracted_val:
+                    self.record.update_filled_state(target_id, extracted_val, confidence=extracted_conf)
+                    logger.info(f"🎯 Single-target extracted: {target_id} = '{extracted_val}' (conf: {extracted_conf})")
+                else:
+                    self.record.update_filled_state(target_id, value, confidence=0.8)
+                    logger.info(f"🎯 Stored raw response for {target_id} = '{value}'")
+        else:
+            # Fallback if no target field was tracked
+            unfilled_fields = [
+                f for f in schema.get("fields", [])
+                if not (self.record.filled_state.get(f["id"], {}).get("value"))
+            ]
+            extracted, _ = conversation_engine.extract_from_response(
+                patient_message=value,
+                unfilled_fields=unfilled_fields,
+                filled_summary=self.record.get_filled_summary(),
+                conversation_history=self.record.conversation_history,
+                language=self.language,
+                doctor_custom_instructions=self.record.doctor_custom_instructions,
+            )
+            for fid, entry in extracted.items():
+                self.record.update_filled_state(fid, entry.get("value"), entry.get("confidence", 0.8))
 
         # 4. SAFETY CHECK: run deterministic rules
         safety_flags = check_safety(self.record.filled_state)
@@ -431,19 +365,22 @@ class DialogueManager:
             schema, self.record.filled_state, self.record.interview_turn_count
         ):
             logger.info(f"Interview complete at turn {self.record.interview_turn_count}")
+            self.current_target_field = None
             self.fsm.advance()  # → DOCUMENT_SCAN
             self.record.macro_state = self.fsm.state
-            # Removed db checkpoint here, handled in main.py
             return self._build_ui_instruction()
 
         # 6. SELECT NEXT FIELD
         next_field = field_selector.next_field(schema, self.record.filled_state)
         if next_field is None:
             # All fields filled — advance
+            self.current_target_field = None
             self.fsm.advance()
             self.record.macro_state = self.fsm.state
-            # Removed db checkpoint here, handled in main.py
             return self._build_ui_instruction()
+
+        # Track active target field for next turn
+        self.current_target_field = next_field
 
         # 7. GENERATE QUESTION for the selected field
         result = conversation_engine.generate_question(
@@ -592,9 +529,12 @@ class DialogueManager:
             next_f = field_selector.next_field(schema, self.record.filled_state)
 
             if next_f is None:
+                self.current_target_field = None
                 self.fsm.advance()
                 self.record.macro_state = self.fsm.state
                 return self._build_ui_instruction()
+
+            self.current_target_field = next_f
 
             result = conversation_engine.generate_question(
                 target_field=next_f,
