@@ -350,6 +350,7 @@ def text_to_speech(
                     "enable_preprocessing": True,
                     "model": "bulbul:v3",
                 },
+                timeout=httpx.Timeout(connect=3.0, read=4.5, write=4.0, pool=3.0),
             )
             response.raise_for_status()
             data = response.json()

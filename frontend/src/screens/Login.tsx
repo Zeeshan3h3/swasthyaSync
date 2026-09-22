@@ -585,6 +585,18 @@ export function Login({ onSessionStarted }: Props) {
     }
   }, [isSpeaking]);
 
+  // Safety fallback: if activeConsentAudio is set but audio is not speaking within 8 seconds, clear state
+  useEffect(() => {
+    if (activeConsentAudio && !isSpeaking) {
+      const timer = setTimeout(() => {
+        if (!wasSpeakingRef.current) {
+          setActiveConsentAudio(null);
+        }
+      }, 8000);
+      return () => clearTimeout(timer);
+    }
+  }, [activeConsentAudio, isSpeaking]);
+
   // Stop active consent audio when user advances beyond consent step
   useEffect(() => {
     if (step !== 'CONSENT') {

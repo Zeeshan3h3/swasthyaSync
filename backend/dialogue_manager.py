@@ -420,11 +420,18 @@ class DialogueManager:
         progress = field_selector.get_progress(schema, self.record.filled_state)
         category_label = field_selector.get_current_category_label(schema, self.record.filled_state)
 
+        is_english = str(self.language).lower().startswith("en")
         options_out = []
         for opt in result.suggested_options:
+            eng_label = opt.get("label", "")
+            trans_label = opt.get("label_translated", "")
+            if is_english:
+                display_label = eng_label if not any(ord(c) > 255 for c in str(eng_label)) else (trans_label if not any(ord(c) > 255 for c in str(trans_label)) else "Option")
+            else:
+                display_label = trans_label or eng_label
             options_out.append({
-                "label": opt.get("label_translated", opt.get("label", "")),
-                "value": opt.get("label", ""),
+                "label": display_label,
+                "value": eng_label or display_label,
                 "icon": None,
             })
 
@@ -495,11 +502,18 @@ class DialogueManager:
                 "assistant", result.spoken_text, "CHIEF_COMPLAINT"
             )
 
+            is_english = str(self.language).lower().startswith("en")
             options_out = []
             for opt in result.suggested_options:
+                eng_label = opt.get("label", "")
+                trans_label = opt.get("label_translated", "")
+                if is_english:
+                    display_label = eng_label if not any(ord(c) > 255 for c in str(eng_label)) else (trans_label if not any(ord(c) > 255 for c in str(trans_label)) else "Option")
+                else:
+                    display_label = trans_label or eng_label
                 options_out.append({
-                    "label": opt.get("label_translated", opt.get("label", "")),
-                    "value": opt.get("label", ""),
+                    "label": display_label,
+                    "value": eng_label or display_label,
                     "icon": None,
                 })
 

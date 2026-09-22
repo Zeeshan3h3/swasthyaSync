@@ -7,6 +7,9 @@ import logging
 import os
 from typing import Optional, List, Dict, Any
 from urllib.parse import quote_plus
+from dotenv import load_dotenv
+
+load_dotenv()
 
 import asyncpg
 
@@ -279,7 +282,8 @@ async def fetch_triage_queue(doctor_id: str = None) -> list[dict]:
                    ps.department, ps.nurse_triage_notes
             FROM patient_sessions ps
             JOIN patients p ON ps.patient_id = p.patient_id
-            WHERE (
+            WHERE ps.session_status != 'ARCHIVED'
+              AND (
                 (ps.created_at AT TIME ZONE 'Asia/Kolkata')::date = (CURRENT_TIMESTAMP AT TIME ZONE 'Asia/Kolkata')::date
                 OR (ps.session_status IN ('WAITING', 'IN_PROGRESS') AND ps.created_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours')
             )
@@ -547,7 +551,7 @@ async def downgrade_priority(session_id: str, admin_email: str):
 async def archive_active_queues(admin_email: str):
     if not _pool: return
     async with _pool.acquire() as conn:
-        await conn.execute("UPDATE patient_sessions SET session_status = 'ARCHIVED' WHERE session_status = 'IN_PROGRESS'")
+        await conn.execute("UPDATE patient_sessions SET session_status = 'ARCHIVED' WHERE session_status != 'ARCHIVED'")
     await log_system_action(admin_email, "EOD_RESET", "ALL_QUEUES")
 
 async def get_all_patients() -> list[dict]:

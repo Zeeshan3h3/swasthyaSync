@@ -248,8 +248,12 @@ def generate_question(
     demo_str = f"Patient: {age_str} {sex_str}".strip()
 
     # Language instruction
-    if language == "en-IN":
-        lang_rule = "Respond in simple, clear English suitable for Indian patients."
+    neg_example = '{"label": "None of these", "label_translated": "None of these"}' if language.startswith("en") else '{"label": "None of these", "label_translated": "इनमें से कुछ नहीं"}'
+    if language.startswith("en"):
+        lang_rule = """CRITICAL LANGUAGE RULE:
+- The patient explicitly selected ENGLISH.
+- All output fields (spoken_text, label, and label_translated) MUST be 100% in plain English.
+- Absolutely NEVER output any Hindi or Devanagari characters anywhere in the response."""
     else:
         lang_rule = f"""CRITICAL LANGUAGE RULE:
 - You MUST respond ENTIRELY in {language_name} using native script.
@@ -278,7 +282,7 @@ CRITICAL RULES (ANTI-HALLUCINATION & ANTI-FLUFF):
 3. Be polite, clear, and use simple everyday language without medical jargon.
 4. Generate 3 to 4 distinct, contextually accurate suggested options the patient can tap.
 5. ALWAYS include a clear negative option as the final option:
-   {{"label": "None of these", "label_translated": "इनमें से कुछ नहीं"}} (or "No" / "नहीं").
+   {neg_example} (or "No").
 6. Do NOT suggest diagnoses or treatments.
 
 OUTPUT FORMAT — Return ONLY a JSON object:
@@ -317,13 +321,24 @@ Generate your direct question about: {question_intent}"""
         if not options:
             options = _fallback_options(language_name)
 
+        # Guarantee clean options and prevent any Hindi/Devanagari leakage into English sessions
+        if language.startswith("en"):
+            cleaned = []
+            for opt in options:
+                lbl = str(opt.get("label", "")).strip()
+                lbl_tr = str(opt.get("label_translated", "")).strip()
+                if any(ord(c) > 255 for c in lbl_tr) or not lbl_tr:
+                    lbl_tr = lbl if not any(ord(c) > 255 for c in lbl) else "Option"
+                if any(ord(c) > 255 for c in lbl):
+                    lbl = lbl_tr if not any(ord(c) > 255 for c in lbl_tr) else "None of these"
+                cleaned.append({"label": lbl, "label_translated": lbl_tr})
+            options = cleaned
+
         # Guarantee a clean negative option exists
         has_negative = any("none" in str(opt.get("label", "")).lower() or "no" == str(opt.get("label", "")).lower().strip() for opt in options)
         if not has_negative:
             if language == "hi-IN":
                 options.append({"label": "None of these", "label_translated": "इनमें से कुछ नहीं"})
-            elif language == "en-IN":
-                options.append({"label": "None of these", "label_translated": "None of these"})
             else:
                 options.append({"label": "None of these", "label_translated": "None of these"})
 
@@ -405,9 +420,22 @@ Include 5-8 common complaint options like: Fever, Pain, Cough, Stomach problem, 
 
     try:
         result = llm_client.conversation_turn(system_prompt, user_prompt, temperature=0.3)
+        raw_options = result.get("suggested_options", _fallback_options(language_name))
+        if language.startswith("en"):
+            cleaned = []
+            for opt in raw_options:
+                lbl = str(opt.get("label", "")).strip()
+                lbl_tr = str(opt.get("label_translated", "")).strip()
+                if any(ord(c) > 255 for c in lbl_tr) or not lbl_tr:
+                    lbl_tr = lbl if not any(ord(c) > 255 for c in lbl) else "Option"
+                if any(ord(c) > 255 for c in lbl):
+                    lbl = lbl_tr if not any(ord(c) > 255 for c in lbl_tr) else "Something else"
+                cleaned.append({"label": lbl, "label_translated": lbl_tr})
+            raw_options = cleaned
+
         return ConversationResult({
             "spoken_text": result.get("spoken_text", "What brings you here today?"),
-            "suggested_options": result.get("suggested_options", _fallback_options(language_name)),
+            "suggested_options": raw_options,
             "extracted_fields": {},
             "red_flag_check": None,
             "reasoning": "",
