@@ -1191,31 +1191,31 @@
                 </div>
                 <div>
                     <span>ABDM MI-ID: IN192830192</span> &bull; 
-                    <span>Page 1 of {% if uploaded_images and uploaded_images|length > 0 %}2{% else %}1{% endif %}</span>
+                    <span>Page 1 of {% if uploaded_images and uploaded_images|length > 0 %}{{ uploaded_images|length + 1 }}{% else %}1{% endif %}</span>
                 </div>
             </div>
         </div>
     </div>
 
     <!-- ======================================================================
-         PAGE 2: CHRONOLOGICAL SOURCE DOCUMENT APPENDICES (IF IMAGES UPLOADED)
+         PAGE 2+: CHRONOLOGICAL SOURCE DOCUMENT APPENDICES (ALL IMAGES BELOW PAGE 1)
          ====================================================================== -->
     {% if uploaded_images and uploaded_images|length > 0 %}
+    {% for img in uploaded_images %}
     <div class="page-sheet page-break appendix-sheet">
         <div>
             <div class="appendix-title-bar">
                 <div>
-                    <h2 class="appendix-h1">Appendix: Uploaded Clinical Source Records</h2>
+                    <h2 class="appendix-h1">Appendix: Uploaded Clinical Record ({{ loop.index }} of {{ uploaded_images|length }})</h2>
                     <p style="font-size:8.5px; color:var(--ink-muted); margin-top:2px;">
                         TOKEN: {{ patient.token }} &bull; PATIENT: {{ patient.name }} &bull; ABHA ID: {{ patient.abha_id | default('N/A') }}
                     </p>
                 </div>
                 <div class="token-callout" style="background:var(--accent-blue);">
-                    VERIFIED EVIDENCE AUDIT
+                    CHRONOLOGICAL AUDIT &bull; DOC #{{ loop.index }}
                 </div>
             </div>
 
-            {% for img in uploaded_images %}
             <div class="appendix-doc-card">
                 <div class="appendix-doc-head">
                     <span>Clinical Source Document #{{ loop.index }}</span>
@@ -1232,16 +1232,16 @@
                     <img src="{{ img }}" class="appendix-doc-img" alt="Source Document {{ loop.index }}" />
                 </div>
             </div>
-            {% endfor %}
         </div>
 
         <div class="footer-boundary">
             <div class="bottom-audit-bar" style="background:#334155;">
                 <div>SwasthyaSync Document Audit Trail &bull; Chronological OCR Verification</div>
-                <div>Page 2 of 2</div>
+                <div>Page {{ loop.index + 1 }} of {{ uploaded_images|length + 1 }}</div>
             </div>
         </div>
     </div>
+    {% endfor %}
     {% endif %}
 
 </body>

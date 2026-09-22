@@ -655,15 +655,51 @@ async def generate_and_save_session_pdf(session_id: str, doctor_prescription_ove
         uploaded_images = []
         doc_extractions_list = []
         
-        # ── Helper: extract earliest clinical date from OCR result ──
+        # ── Helper: parse any raw date to sortable ISO YYYY-MM-DD ──
+        def _parse_to_iso_date(raw_date_str: str) -> str:
+            NO_DATE = "9999-12-31"
+            if not raw_date_str or not isinstance(raw_date_str, str):
+                return NO_DATE
+            raw = raw_date_str.strip()
+            # Try DD/MM/YYYY
+            try:
+                parts = raw.split("/")
+                if len(parts) == 3 and len(parts[2]) == 4:
+                    d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                    return f"{y:04d}-{m:02d}-{d:02d}"
+            except Exception:
+                pass
+            # Try DD-MM-YYYY
+            try:
+                parts = raw.split("-")
+                if len(parts) == 3 and len(parts[2]) == 4:
+                    d, m, y = int(parts[0]), int(parts[1]), int(parts[2])
+                    return f"{y:04d}-{m:02d}-{d:02d}"
+            except Exception:
+                pass
+            # Try YYYY-MM-DD
+            try:
+                parts = raw.split("-")
+                if len(parts) == 3 and len(parts[0]) == 4:
+                    y, m, d = int(parts[0]), int(parts[1]), int(parts[2])
+                    return f"{y:04d}-{m:02d}-{d:02d}"
+            except Exception:
+                pass
+            return raw
+
         def _extract_earliest_date(ocr_data: dict) -> str:
             NO_DATE = "9999-12-31"
             try:
-                cs = ocr_data.get("consolidated_summary", {})
+                cs = ocr_data.get("consolidated_summary_json") or ocr_data.get("consolidated_summary") or {}
                 if isinstance(cs, str):
                     cs = json.loads(cs)
                 dates = cs.get("document_dates", [])
-                valid = [d.get("date", "") for d in dates if d.get("date")]
+                valid = []
+                for d in dates:
+                    raw_d = d.get("date", "") if isinstance(d, dict) else str(d)
+                    iso_d = _parse_to_iso_date(raw_d)
+                    if iso_d and iso_d != NO_DATE:
+                        valid.append(iso_d)
                 if valid:
                     valid.sort()
                     return valid[0]
@@ -672,11 +708,11 @@ async def generate_and_save_session_pdf(session_id: str, doctor_prescription_ove
             return NO_DATE
 
         _image_date_pairs = []
-        if dm:
+        seen_paths = set()
+        
+        if dm and getattr(dm.record, "document_extractions", None):
             filled_state_json = dm.record.filled_state
             doc_extractions_list = [ext.model_dump() for ext in dm.record.document_extractions]
-            
-            _image_date_pairs = []
             for doc in dm.record.document_extractions:
                 if not getattr(doc, 'ocr_path', None):
                     continue
@@ -684,29 +720,30 @@ async def generate_and_save_session_pdf(session_id: str, doctor_prescription_ove
                 ocr_data = doc.entities[0] if doc.entities else {}
                 earliest = _extract_earliest_date(ocr_data)
                 for p in paths:
+                    if p not in seen_paths:
+                        seen_paths.add(p)
+                        _image_date_pairs.append((earliest, p))
+        
+        # Also check DB for uploaded_documents to guarantee complete coverage
+        db_docs = await conn.fetch("SELECT file_path, ocr_raw_json FROM uploaded_documents WHERE session_id = $1", session_id)
+        if not filled_state_json and p_sess.get("filled_state_json"):
+            filled_state_json = json.loads(p_sess["filled_state_json"])
+            
+        for doc in db_docs:
+            raw_paths = doc["file_path"] or ""
+            paths = [p.strip() for p in raw_paths.split(",") if p.strip()]
+            ocr_data = json.loads(doc["ocr_raw_json"]) if doc["ocr_raw_json"] else {}
+            earliest = _extract_earliest_date(ocr_data)
+            if ocr_data and ocr_data not in doc_extractions_list:
+                doc_extractions_list.append(ocr_data)
+            for p in paths:
+                if p not in seen_paths:
+                    seen_paths.add(p)
                     _image_date_pairs.append((earliest, p))
-            
-            _image_date_pairs.sort(key=lambda x: x[0])
-            uploaded_images = [p for _, p in _image_date_pairs]
-        else:
-            filled_state_json = json.loads(p_sess["filled_state_json"]) if p_sess.get("filled_state_json") else {}
-            db_docs = await conn.fetch("SELECT file_path, ocr_raw_json FROM uploaded_documents WHERE session_id = $1", session_id)
-            
-            _image_date_pairs = []
-            for doc in db_docs:
-                if doc["file_path"]:
-                    paths = [p.strip() for p in doc["file_path"].split(",") if p.strip()]
-                else:
-                    paths = []
-                ocr_data = json.loads(doc["ocr_raw_json"]) if doc["ocr_raw_json"] else {}
-                earliest = _extract_earliest_date(ocr_data)
-                if ocr_data:
-                    doc_extractions_list.append(ocr_data)
-                for p in paths:
-                    _image_date_pairs.append((earliest, p))
-            
-            _image_date_pairs.sort(key=lambda x: x[0])
-            uploaded_images = [p for _, p in _image_date_pairs]
+
+        # Sort strictly chronologically by date
+        _image_date_pairs.sort(key=lambda x: x[0])
+        uploaded_images = [p for _, p in _image_date_pairs]
                     
         for ext in doc_extractions_list:
             if "medications" in ext:
