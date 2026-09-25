@@ -16,6 +16,7 @@ Skips any field whose `conditional_on` condition is not met.
 
 from __future__ import annotations
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -28,10 +29,31 @@ PRIORITY_ORDER = {
 }
 
 
+# Negative answer patterns — mirrors conversation_engine._is_negative_answer()
+_NEGATIVE_VALUES = frozenset([
+    "no", "nahi", "nah", "nope", "denied / none", "denied", "none",
+    "not provided", "not applicable", "na", "n/a",
+    "healthy", "normal", "fine", "none of these",
+])
+
+
+def _is_positive_value(actual: str) -> bool:
+    """Return True when a stored value represents a positive / affirmative answer."""
+    if not actual:
+        return False
+    a = actual.lower().strip().rstrip(".!,")
+    if a in _NEGATIVE_VALUES:
+        return False
+    if a.startswith(("no ", "no,", "none ", "nahi ", "not ")):
+        return False
+    return True
+
+
 def _is_condition_met(field: dict, filled_state: dict) -> bool:
     """
     Check if a field's conditional_on prerequisite is satisfied.
     Format: "field_id:value" or "field_id:!value" (negation).
+    Special values: "yes" → any positive answer; "no" → any negative answer.
     If no condition, always True.
     """
     condition = field.get("conditional_on")
@@ -43,7 +65,7 @@ def _is_condition_met(field: dict, filled_state: dict) -> bool:
     if len(parts) != 2:
         return True  # Malformed condition — don't block
 
-    cond_field_id, expected = parts[0].strip(), parts[1].strip()
+    cond_field_id, expected = parts[0].strip(), parts[1].strip().lower()
 
     # Get the actual value
     entry = filled_state.get(cond_field_id, {})
@@ -52,11 +74,21 @@ def _is_condition_met(field: dict, filled_state: dict) -> bool:
     if not actual:
         return False  # Prerequisite field not yet filled — skip for now
 
-    # Negation check
+    # ── Fork-aware semantic checks ──
+    if expected == "yes":
+        # Any positive (non-negative) answer counts as yes
+        return _is_positive_value(actual)
+
+    if expected == "no":
+        # Any negative answer counts as no
+        return not _is_positive_value(actual)
+
+    # Negation check (field_id:!value)
     if expected.startswith("!"):
-        return actual != expected[1:].lower().strip()
-    
-    return actual == expected.lower().strip()
+        return actual != expected[1:].strip()
+
+    # Exact string match for all other conditions
+    return actual == expected
 
 
 def _sort_key(field: dict) -> tuple:
@@ -144,23 +176,67 @@ def get_unfilled_field_ids(schema: dict, filled_state: dict) -> list[str]:
     return unfilled
 
 
+def _is_info_already_captured(field: dict, conversation_history: list) -> str | None:
+    """
+    B4 — Deduplication guard for fork children.
+    Check if the information a field asks about was already mentioned by the patient
+    in a previous turn. Uses simple keyword matching — no LLM, zero hallucination risk.
+
+    Returns the matching patient message string if found, None otherwise.
+    """
+    intent = field.get("question_intent", "")
+    if not intent:
+        return None
+
+    # Extract meaningful keywords from question_intent (words > 3 chars)
+    raw_words = re.split(r"[\s,?.'\"!]+", intent.lower())
+    stop_words = {"does", "your", "have", "been", "this", "that", "with", "from",
+                  "into", "when", "what", "where", "which", "there", "their", "about",
+                  "pain", "symptom", "patient", "please", "tell", "feel", "feeling"}
+    keywords = [w for w in raw_words if len(w) > 3 and w not in stop_words]
+
+    if not keywords:
+        return None
+
+    # Search patient messages in conversation history
+    for msg in conversation_history:
+        if msg.get("role") != "patient":
+            continue
+        content = msg.get("content", "").lower()
+        if not content:
+            continue
+        # If at least 2 keywords match → info was already provided
+        hits = sum(1 for kw in keywords if kw in content)
+        if hits >= min(2, len(keywords)):
+            return msg.get("content", "")
+
+    return None
+
+
 def get_progress(schema: dict, filled_state: dict) -> dict:
     """
-    Calculate progress based on critical + high priority fields.
+    B5 — Calculate progress based on active critical + high priority fields.
+    "Active" means: no conditional_on, OR conditional_on condition is already met.
+    Fork children only count toward the total once their parent triggers them.
+    This prevents the progress bar from going backwards when forks activate.
     Returns {done, total, percent, label}.
     """
     fields = schema.get("fields", [])
-    
-    # Only count critical + high for progress
-    target_fields = [f for f in fields if f.get("priority") in ("critical", "high")]
+
+    # Only count critical + high fields whose conditions are currently met
+    target_fields = [
+        f for f in fields
+        if f.get("priority") in ("critical", "high")
+        and _is_condition_met(f, filled_state)
+    ]
     total = len(target_fields)
-    
+
     filled = 0
     for f in target_fields:
         entry = filled_state.get(f["id"], {})
         if isinstance(entry, dict) and entry.get("value"):
             filled += 1
-    
+
     percent = int((filled / total * 100)) if total > 0 else 0
     return {
         "done": filled,

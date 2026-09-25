@@ -83,8 +83,31 @@ CRITICAL RULES:
 3. Each field must have a clear, natural question_intent.
 4. Assign priority: "critical" (must ask), "high" (should ask), "medium" (nice to have), "optional" (if time permits).
 5. Mark red_flag: true ONLY if a positive answer indicates an acute medical emergency.
-6. Set fork_eligible: false for all fields.
+6. Set fork_eligible: false by default. See FORKING RULES below for when to enable it.
 7. Output ONLY a valid JSON object matching the schema below. Generate between 15 and 30 fields.
+
+CANONICAL FIELD ID REFERENCE (A2):
+When generating fields for these common clinical concepts, use EXACTLY these field IDs:
+- When symptoms started:              symptom_onset
+- Severity/intensity of complaint:    symptom_severity_impact
+- Prior similar episodes:             prior_episodes
+- Current regular medications:        current_medications
+- Drug or food allergies:             known_allergies
+- Existing chronic conditions:        chronic_conditions
+For all other complaint-specific fields, use descriptive snake_case IDs unique to the complaint.
+
+FORKING RULES (B1 — Static pre-declared forking, zero runtime LLM):
+1. You MAY mark up to 5 fields as fork_eligible: true.
+2. For each fork-eligible field, populate forks_on_positive with an array of child field IDs.
+3. Each fork-eligible parent has MAX 3 child fields. Never more.
+4. ALL child fields MUST also be declared as full field objects in the "fields" array.
+5. Child fields MUST have conditional_on set to "parent_field_id:yes".
+6. Child fields MUST have fork_eligible: false and forks_on_positive: [].
+7. Total fields (base + all fork children) must not exceed 30.
+8. Only fork when the patient’s positive answer meaningfully changes the clinical picture.
+   GOOD fork triggers: pain radiation, associated fever, breathlessness, bleeding, loss of consciousness.
+   BAD fork triggers: general lifestyle, mild associated symptoms, chronic stable history.
+9. Fields where forking adds no clinical value: set fork_eligible: false, forks_on_positive: [].
 
 The following fields are MANDATORY red-flag safety requirements for this complaint category. They MUST appear in your schema:
 {safety_floor_text}
@@ -97,10 +120,11 @@ Output ONLY a JSON object with this exact structure:
       "id": "unique_snake_case_id",
       "question_intent": "what this field is trying to learn, in plain language",
       "type": "string",
-      "priority": "critical|high|medium",
+      "priority": "critical|high|medium|optional",
       "red_flag": true/false,
       "fork_eligible": false,
-      "category": "HPI|PMH|DH|red_flag_check",
+      "forks_on_positive": [],
+      "category": "HPI|PMH|DH|FH|SH|ROS|red_flag_check",
       "conditional_on": null
     }}
   ]
@@ -255,10 +279,13 @@ def _build_static_fallback(chief_complaint: str, category: str) -> dict:
 
 
 def _validate_schema(schema: dict, chief_complaint: str, is_ayush: bool = False) -> dict:
-    """Validate and clean the generated schema. Ensures strictly bounded 5-7 fields for allopathic."""
+    """Validate and clean the generated schema. Enforces caps and fork integrity."""
     schema.setdefault("chief_complaint", chief_complaint)
     fields = schema.get("fields", [])
     is_ayush_schema = is_ayush or any(f.get("category") == "PRAKRITI" for f in fields)
+
+    # Build a set of declared field IDs for fork child validation
+    declared_ids = {f.get("id", "") for f in fields if f.get("id")}
 
     # Ensure all fields have required keys
     valid_fields = []
@@ -269,14 +296,36 @@ def _validate_schema(schema: dict, chief_complaint: str, is_ayush: bool = False)
             continue
         seen_ids.add(fid)
 
-        # Ensure defaults & guarantee fork_eligible is False
+        # Ensure defaults
         f.setdefault("question_intent", f.get("id", "").replace("_", " "))
         f.setdefault("type", "string")
         f.setdefault("priority", "medium")
         f.setdefault("red_flag", False)
-        f["fork_eligible"] = False  # Banned to prevent dynamic branch explosion
+        f.setdefault("fork_eligible", False)
+        f.setdefault("forks_on_positive", [])
         f.setdefault("category", "HPI")
         f.setdefault("conditional_on", None)
+
+        # B1: Fork integrity checks
+        forks_on_positive = f.get("forks_on_positive", [])
+        if not isinstance(forks_on_positive, list):
+            f["forks_on_positive"] = []
+            forks_on_positive = []
+
+        if f.get("fork_eligible"):
+            # Remove child IDs that don't exist in the schema
+            valid_children = [cid for cid in forks_on_positive if cid in declared_ids and cid != fid]
+            f["forks_on_positive"] = valid_children[:3]  # Max 3 children
+            # If no valid children, disable fork_eligible
+            if not f["forks_on_positive"]:
+                f["fork_eligible"] = False
+        else:
+            f["forks_on_positive"] = []  # Non-fork-eligible fields have empty list
+
+        # B1: Fork children must not themselves be fork-eligible (no recursion)
+        if f.get("conditional_on") and ":yes" in str(f.get("conditional_on", "")):
+            f["fork_eligible"] = False
+            f["forks_on_positive"] = []
 
         # Validate priority
         if f["priority"] not in ("critical", "high", "medium", "optional"):
@@ -284,7 +333,17 @@ def _validate_schema(schema: dict, chief_complaint: str, is_ayush: bool = False)
 
         valid_fields.append(f)
 
-    # If standard allopathic schema exceeds 30 fields, prioritize critical/red-flag items first and cap at 30
+    # B1: Enforce max 5 fork parents and max 15 total fork children
+    fork_parents = [f for f in valid_fields if f.get("fork_eligible")]
+    if len(fork_parents) > 5:
+        # Keep the 5 with highest priority
+        pw = {"critical": 0, "high": 1, "medium": 2, "optional": 3}
+        fork_parents.sort(key=lambda x: pw.get(x.get("priority", "medium"), 2))
+        for fp in fork_parents[5:]:
+            fp["fork_eligible"] = False
+            fp["forks_on_positive"] = []
+
+    # If standard allopathic schema exceeds 30 fields, prioritize critical/red-flag items and cap at 30
     if not is_ayush_schema and len(valid_fields) > 30:
         priority_weights = {"critical": 0, "high": 1, "medium": 2, "optional": 3}
         valid_fields.sort(key=lambda x: (priority_weights.get(x.get("priority", "medium"), 2), not x.get("red_flag", False)))

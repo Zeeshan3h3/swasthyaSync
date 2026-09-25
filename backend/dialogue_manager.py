@@ -41,6 +41,8 @@ class DialogueManager:
         self.language = language
         self.last_active_time = time.time()
         self.current_target_field: dict | None = None
+        self.last_displayed_field: dict | None = None   # A5: track most recently displayed field
+        self.last_options: list = []                    # A3: re-serve options on back/skip
 
     # ──────────────────────────────────────────────────────────────────
     # PUBLIC API
@@ -327,27 +329,88 @@ class DialogueManager:
                 extracted_val = extracted_dict.get("value")
                 extracted_conf = extracted_dict.get("confidence", 0.95)
                 if extracted_val:
+                    # Normal extraction success
                     self.record.update_filled_state(target_id, extracted_val, confidence=extracted_conf)
                     logger.info(f"🎯 Single-target extracted: {target_id} = '{extracted_val}' (conf: {extracted_conf})")
-                else:
-                    self.record.update_filled_state(target_id, value, confidence=0.8)
-                    logger.info(f"🎯 Stored raw response for {target_id} = '{value}'")
+                elif value.strip():
+                    # A4: Patient said something but LLM couldn't map it — store verbatim
+                    self.record.update_filled_state(target_id, value.strip()[:120], confidence=0.55)
+                    logger.info(f"📝 Verbatim stored for {target_id}: LLM extraction returned null")
+                # else: empty string — A1 guard below handles this
+
+            # ── A1: Force-advance guard ──────────────────────────────────────
+            # After ALL extraction paths, if field still has no value
+            # (empty voice, garbage audio, repeated null) → mark "Not provided"
+            # so the interview never loops on the same field.
+            if self.record.filled_state.get(target_id, {}).get("value") is None:
+                self.record.update_filled_state(target_id, "Not provided", confidence=0.4)
+                logger.warning(f"⚠️ Force-advance: {target_id} had no extractable value — marked 'Not provided'")
+
+            # ── B3: Fork activation dedup guard ─────────────────────────────
+            # If we just filled a fork-eligible field with a positive answer,
+            # check if any fork children were already mentioned by the patient.
+            # If so, pre-fill them so they won't be asked again.
+            if target_field.get("fork_eligible") and field_selector._is_positive_value(
+                str(self.record.filled_state.get(target_id, {}).get("value", "")).lower()
+            ):
+                schema_fields = schema.get("fields", [])
+                field_map = {f["id"]: f for f in schema_fields}
+                for child_id in target_field.get("forks_on_positive", []):
+                    child_field = field_map.get(child_id)
+                    if not child_field:
+                        continue
+                    # Skip if already filled
+                    if self.record.filled_state.get(child_id, {}).get("value"):
+                        continue
+                    # Check if patient already mentioned this info
+                    captured = field_selector._is_info_already_captured(
+                        child_field, self.record.conversation_history
+                    )
+                    if captured:
+                        self.record.update_filled_state(child_id, captured[:120], confidence=0.75)
+                        logger.info(f"⚡ Fork child pre-filled from earlier context: {child_id}")
+
         else:
-            # Fallback if no target field was tracked
+            # A5: Fallback when no target field tracked
+            # Try to recover from last_displayed_field first (primary target)
+            # then run broad extraction for bonus multi-info capture
             unfilled_fields = [
                 f for f in schema.get("fields", [])
                 if not (self.record.filled_state.get(f["id"], {}).get("value"))
             ]
-            extracted, _ = conversation_engine.extract_from_response(
-                patient_message=value,
-                unfilled_fields=unfilled_fields,
-                filled_summary=self.record.get_filled_summary(),
-                conversation_history=self.record.conversation_history,
-                language=self.language,
-                doctor_custom_instructions=self.record.doctor_custom_instructions,
-            )
-            for fid, entry in extracted.items():
-                self.record.update_filled_state(fid, entry.get("value"), entry.get("confidence", 0.8))
+
+            primary_filled = False
+            if self.last_displayed_field:
+                primary_id = self.last_displayed_field.get("id")
+                if not self.record.filled_state.get(primary_id, {}).get("value"):
+                    extracted_dict = conversation_engine.extract_single_target_field(
+                        target_field=self.last_displayed_field,
+                        patient_message=value,
+                        language=self.language,
+                    )
+                    pval = extracted_dict.get("value")
+                    if pval:
+                        self.record.update_filled_state(primary_id, pval, extracted_dict.get("confidence", 0.8))
+                        logger.info(f"🎯 A5 primary recovered: {primary_id} = '{pval}'")
+                        primary_filled = True
+                    elif value.strip():
+                        self.record.update_filled_state(primary_id, value.strip()[:120], confidence=0.55)
+                        logger.info(f"📝 A5 primary verbatim: {primary_id}")
+                        primary_filled = True
+
+            # Broad extraction for remaining / bonus fields
+            remaining = [f for f in unfilled_fields if not self.record.filled_state.get(f["id"], {}).get("value")]
+            if remaining:
+                extracted, _ = conversation_engine.extract_from_response(
+                    patient_message=value,
+                    unfilled_fields=remaining,
+                    filled_summary=self.record.get_filled_summary(),
+                    conversation_history=self.record.conversation_history,
+                    language=self.language,
+                    doctor_custom_instructions=self.record.doctor_custom_instructions,
+                )
+                for fid, entry in extracted.items():
+                    self.record.update_filled_state(fid, entry.get("value"), entry.get("confidence", 0.8))
 
         # 4. SAFETY CHECK: run deterministic rules
         safety_flags = check_safety(self.record.filled_state)
@@ -404,7 +467,11 @@ class DialogueManager:
         # Removed db checkpoint here, handled in main.py
 
         # 8. Build UI response
-        return self._build_dynamic_ui(result, next_field)
+        ui_response = self._build_dynamic_ui(result, next_field)
+        # A3: cache last options for re-serve on back/skip navigation
+        self.last_options = ui_response.get("options", [])
+        self.last_displayed_field = next_field   # A5: track for fallback recovery
+        return ui_response
 
     # ──────────────────────────────────────────────────────────────────
     # UI INSTRUCTION BUILDER
@@ -524,8 +591,35 @@ class DialogueManager:
             }
 
         if state == "DYNAMIC_INTERVIEW":
-            # Generate first question for the dynamic interview
             schema = self.record.dynamic_schema or {"fields": []}
+
+            # ── A3: Navigation fix ───────────────────────────────────────────
+            # If conversation_history already has an assistant message, this call
+            # is from back/skip navigation — re-serve the last question instead
+            # of generating a new one (which would add a duplicate to history).
+            last_assistant = next(
+                (m for m in reversed(self.record.conversation_history) if m.get("role") == "assistant"),
+                None,
+            )
+            if last_assistant and self.current_target_field:
+                logger.info("A3: Re-serving last question on navigation (no new LLM call)")
+                return {
+                    "macro_state": "DYNAMIC_INTERVIEW",
+                    "clinic_mode": self.record.clinic_mode,
+                    "session_id": self.record.session_id,
+                    "language": self.language,
+                    "screen": "conversation",
+                    "orb_state": "idle",
+                    "prompt": last_assistant.get("content", ""),
+                    "options": self.last_options,
+                    "section_label": field_selector.get_current_category_label(schema, self.record.filled_state),
+                    "can_skip": True,
+                    "progress": field_selector.get_progress(schema, self.record.filled_state),
+                    "section_summary": self.record.get_filled_summary(),
+                    "conversation_history": self.record.conversation_history[-6:],
+                }
+
+            # First entry into DYNAMIC_INTERVIEW — generate opening question
             next_f = field_selector.next_field(schema, self.record.filled_state)
 
             if next_f is None:
@@ -535,6 +629,7 @@ class DialogueManager:
                 return self._build_ui_instruction()
 
             self.current_target_field = next_f
+            self.last_displayed_field = next_f   # A5: track
 
             result = conversation_engine.generate_question(
                 target_field=next_f,
@@ -549,8 +644,9 @@ class DialogueManager:
             self.record.add_conversation_message(
                 "assistant", result.spoken_text, next_f.get("category", "HPI")
             )
-
-            return self._build_dynamic_ui(result, next_f)
+            ui_response = self._build_dynamic_ui(result, next_f)
+            self.last_options = ui_response.get("options", [])  # A3: cache for re-serve
+            return ui_response
 
         if state == "DOCUMENT_SCAN":
             return {**base, "screen": "document_scan", "orb_state": "idle", "patient_name": self.record.patient_name}
