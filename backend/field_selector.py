@@ -181,7 +181,7 @@ def is_interview_complete(schema: dict, filled_state: dict, turn_count: int, max
     """
     fields = schema.get("fields", [])
     is_ayush = any(f.get("category") == "PRAKRITI" for f in fields)
-    effective_max = max_turns if max_turns is not None else (25 if is_ayush else 7)
+    effective_max = max_turns if max_turns is not None else (25 if is_ayush else 30)
 
     if turn_count >= effective_max:
         logger.info(f"Interview ending: max turns ({effective_max}) reached")
@@ -199,19 +199,19 @@ def is_interview_complete(schema: dict, filled_state: dict, turn_count: int, max
         logger.info(f"Interview ending: all {len(critical_high)} critical/high fields filled at turn {turn_count}")
         return True
 
-    # High clinical coverage reached (for allopathic)
-    if not is_ayush and filled_count >= 5 and turn_count >= 5:
+    # High clinical coverage reached (for allopathic) — at least 12 fields filled and 12 turns done
+    if not is_ayush and filled_count >= 12 and turn_count >= 12:
         logger.info(f"Interview ending: sufficient clinical coverage ({filled_count} fields) at turn {turn_count}")
         return True
 
-    # All safety-critical fields answered and at least 5 turns (for allopathic)
+    # All safety-critical fields answered and at least 15 turns (for allopathic)
     if not is_ayush:
         unfilled_critical = [
             f for f in fields
             if f.get("priority") == "critical"
             and not (isinstance(filled_state.get(f["id"]), dict) and filled_state[f["id"]].get("value"))
         ]
-        if not unfilled_critical and turn_count >= 5:
+        if not unfilled_critical and turn_count >= 15:
             logger.info(f"Interview ending: all critical fields answered at turn {turn_count}")
             return True
 

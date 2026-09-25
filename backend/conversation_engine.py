@@ -139,7 +139,7 @@ def extract_from_response(
     language_name = LANGUAGE_NAMES.get(language, "English")
 
     field_descriptions = []
-    for f in unfilled_fields[:8]:  # Limit to top 8 baseline fields
+    for f in unfilled_fields[:20]:  # Limit to top 20 baseline fields
         field_descriptions.append(f"- {f['id']}: {f.get('question_intent', f['id'])}")
     fields_text = "\n".join(field_descriptions)
 

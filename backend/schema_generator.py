@@ -61,17 +61,30 @@ Your task: Given a patient's chief complaint and demographics, generate a concis
 
 CRITICAL RULES:
 1. The schema must be HIGHLY SPECIFIC to the chief complaint. Do NOT include generic screening questions that are irrelevant.
-2. Generate EXACTLY 5 to 7 high-yield clinical fields total. Focus strictly on:
-   - Onset / duration (HPI)
-   - Severity / character / exact anatomical location (HPI)
+2. Generate 15 to 30 high-yield clinical fields total. Cover the following areas comprehensively:
+   - Onset / duration / mode of onset (HPI)
+   - Severity / intensity / character / quality of symptom (HPI)
+   - Exact anatomical location and radiation/spread (HPI)
+   - Aggravating and relieving factors (HPI)
+   - Associated symptoms (fever, nausea, vomiting, etc.) (HPI)
+   - Prior episodes of same complaint (HPI)
+   - Any recent trauma, travel, or exposure (HPI)
    - Primary red-flag / safety sign for this condition (red_flag_check)
-   - Relevant chronic illnesses (PMH)
-   - Current medications or drug allergies (DH)
+   - Secondary safety signs relevant to the complaint (red_flag_check)
+   - Relevant chronic illnesses / past medical history (PMH)
+   - Past surgeries or hospitalizations (PMH)
+   - Current medications (DH)
+   - Known drug or food allergies (DH)
+   - Family history relevant to the complaint (FH)
+   - Occupation and daily routine if relevant (SH)
+   - Smoking / alcohol / substance use if relevant (SH)
+   - Menstrual history if female patient and complaint is relevant (HPI)
+   - Review of systems questions relevant to the complaint (ROS)
 3. Each field must have a clear, natural question_intent.
-4. Assign priority: "critical" (must ask), "high" (should ask), "medium" (optional).
+4. Assign priority: "critical" (must ask), "high" (should ask), "medium" (nice to have), "optional" (if time permits).
 5. Mark red_flag: true ONLY if a positive answer indicates an acute medical emergency.
 6. Set fork_eligible: false for all fields.
-7. Output ONLY a valid JSON object matching the schema below. Keep it strictly between 5 and 7 fields.
+7. Output ONLY a valid JSON object matching the schema below. Generate between 15 and 30 fields.
 
 The following fields are MANDATORY red-flag safety requirements for this complaint category. They MUST appear in your schema:
 {safety_floor_text}
@@ -194,7 +207,7 @@ def _call_model_for_schema(model: str, system_prompt: str, user_prompt: str) -> 
                 system_instruction=system_prompt,
                 response_mime_type="application/json",
                 temperature=0.3,
-                max_output_tokens=2048,
+                max_output_tokens=6000,
                 automatic_function_calling=genai_types.AutomaticFunctionCallingConfig(disable=True),
             ),
         )
@@ -228,16 +241,16 @@ def _build_static_fallback(chief_complaint: str, category: str) -> dict:
         {"id": "chronic_conditions", "question_intent": "Any existing chronic health conditions", "type": "string", "priority": "medium", "red_flag": False, "fork_eligible": False, "category": "PMH", "conditional_on": None},
     ]
 
-    # Merge baseline + safety floor, avoiding duplicates, capping at 7
+    # Merge baseline + safety floor, avoiding duplicates, capping at 30
     existing_ids = {f["id"] for f in safety_fields}
     all_fields = list(safety_fields)
     for f in baseline:
-        if f["id"] not in existing_ids and len(all_fields) < 7:
+        if f["id"] not in existing_ids and len(all_fields) < 30:
             all_fields.append(f)
 
     return {
         "chief_complaint": chief_complaint,
-        "fields": all_fields[:7],
+        "fields": all_fields[:30],
     }
 
 
@@ -271,11 +284,11 @@ def _validate_schema(schema: dict, chief_complaint: str, is_ayush: bool = False)
 
         valid_fields.append(f)
 
-    # If standard allopathic schema exceeds 7 fields, prioritize critical/red-flag items first and cap strictly at 7
-    if not is_ayush_schema and len(valid_fields) > 7:
+    # If standard allopathic schema exceeds 30 fields, prioritize critical/red-flag items first and cap at 30
+    if not is_ayush_schema and len(valid_fields) > 30:
         priority_weights = {"critical": 0, "high": 1, "medium": 2, "optional": 3}
         valid_fields.sort(key=lambda x: (priority_weights.get(x.get("priority", "medium"), 2), not x.get("red_flag", False)))
-        valid_fields = valid_fields[:7]
+        valid_fields = valid_fields[:30]
 
     schema["fields"] = valid_fields
     return schema
