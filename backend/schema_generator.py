@@ -27,10 +27,10 @@ logger = logging.getLogger(__name__)
 # Stage 1 Model Cascade — clinical reasoning models for dynamic interview schema
 # ──────────────────────────────────────────────────────────────────────
 SCHEMA_MODELS_CASCADE = [
-    "gemini-3.6-flash",          # High reasoning primary (~2.1s, 0 errors)
-    "gemini-3.1-flash-lite",      # Fast tier-2 backup (~1.5s)
-    "gemini-flash-lite-latest",  # Alias tier-3 backup
-    "gemini-3.5-flash-lite",     # Tier-4 fallback
+    "gemini-3.5-flash-lite",     # fastest reliably-available model (multimodal)
+    "gemini-flash-lite-latest",  # alias backup
+    "gemini-3.6-flash",          # stronger, but frequently 503 under load
+    "gemini-3.1-flash-lite",     # last resort
 ]
 
 SCHEMA_MODEL_PRIMARY = SCHEMA_MODELS_CASCADE[0]
@@ -164,9 +164,16 @@ def generate_schema(
     t0 = time.time()
 
     # Try models in cascade order (high reasoning first, then fast fallbacks)
+    # Patients wait on this screen, so cap the total time. Overloaded models (503) are skipped via the
+    # shared cool-down in llm_client; after the budget the safe static questionnaire is used.
+    SCHEMA_TOTAL_BUDGET_S = 15.0
     schema = None
-    for model in SCHEMA_MODELS_CASCADE:
-        schema = _call_model_for_schema(model, system_prompt, user_prompt, timeout_seconds=25.0)
+    for model in llm_client.available_models(SCHEMA_MODELS_CASCADE):
+        remaining = SCHEMA_TOTAL_BUDGET_S - (time.time() - t0)
+        if remaining < 2.0:
+            logger.warning("Schema generation time budget used up — using static fallback schema")
+            break
+        schema = _call_model_for_schema(model, system_prompt, user_prompt, timeout_seconds=min(10.0, remaining))
         if schema:
             break
         logger.warning(f"⚡ Schema model ({model}) failed or timed out — cascading to backup")
@@ -235,7 +242,10 @@ def _call_model_for_schema(model: str, system_prompt: str, user_prompt: str, tim
             return None
 
     except Exception as e:
-        logger.error(f"Schema generation with {model} failed: {e}")
+        err = str(e)
+        logger.error(f"Schema generation with {model} failed: {err[:160] or type(e).__name__}")
+        if hasattr(llm_client, "_cool_down"):
+            llm_client._cool_down(model, llm_client._failure_reason(err) or ("timeout" if not err else ""))
         return None
 
 

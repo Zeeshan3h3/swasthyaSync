@@ -24,10 +24,10 @@ client = genai.Client(api_key=GEMINI_API_KEY) if GEMINI_API_KEY else None
 
 # Multimodal Model Cascade for Batch Document & Prescription OCR
 OCR_MODELS_CASCADE = [
-    "gemini-3.6-flash",          # Superior vision & clinical reasoning for prescriptions/labs
-    "gemini-3.1-flash-lite",      # Fast multimodal backup (~1.5s)
-    "gemini-flash-lite-latest",  # Dynamic alias backup
-    "gemini-3.5-flash-lite",     # Tier-4 fallback
+    "gemini-3.5-flash-lite",     # fastest reliably-available model (multimodal)
+    "gemini-flash-lite-latest",  # alias backup
+    "gemini-3.6-flash",          # stronger, but frequently 503 under load
+    "gemini-3.1-flash-lite",     # last resort
 ]
 
 # ------------------------------------------------------------------
@@ -1304,7 +1304,14 @@ async def process_batch_ocr(image_bytes_list: List[bytes], media_types: List[str
     parsed = None
     last_err = None
 
-    for model_name in OCR_MODELS_CASCADE:
+    # Skip models that are cooling down after 503/404 (shared with llm_client) and cap the total wait.
+    import llm_client as _llm
+    OCR_TOTAL_BUDGET_S = 45.0
+    for model_name in _llm.available_models(OCR_MODELS_CASCADE):
+        remaining = OCR_TOTAL_BUDGET_S - (time.time() - start_time)
+        if remaining < 3.0:
+            last_err = last_err or "OCR time budget used up"
+            break
         try:
             logger.info(f"Attempting batch OCR with model {model_name}...")
             call_coro = client.aio.models.generate_content(
@@ -1317,7 +1324,7 @@ async def process_batch_ocr(image_bytes_list: List[bytes], media_types: List[str
                     temperature=0.0
                 )
             )
-            response = await asyncio.wait_for(call_coro, timeout=20.0)
+            response = await asyncio.wait_for(call_coro, timeout=min(20.0, remaining))
             parsed = response.parsed
             if parsed:
                 logger.info(f"Batch OCR succeeded with model {model_name} in {time.time()-start_time:.2f}s")
@@ -1325,10 +1332,12 @@ async def process_batch_ocr(image_bytes_list: List[bytes], media_types: List[str
         except asyncio.TimeoutError:
             logger.warning(f"⚡ Batch OCR timed out on {model_name} (20s limit) — cascading to backup")
             last_err = "Model timeout"
+            _llm._cool_down(model_name, "timeout")
             continue
         except Exception as e:
             last_err = str(e)
             logger.warning(f"⚡ Batch OCR failed on {model_name}: {e} — cascading to backup")
+            _llm._cool_down(model_name, _llm._failure_reason(last_err))
             continue
 
     if parsed:
